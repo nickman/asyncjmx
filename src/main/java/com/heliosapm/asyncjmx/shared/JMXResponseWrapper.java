@@ -2,7 +2,7 @@
  * Helios, OpenSource Monitoring
  * Brought to you by the Helios Development Group
  *
- * Copyright 2007, Helios Development Group and individual contributors
+ * Copyright 2014, Helios Development Group and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -22,22 +22,40 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.asyncjmx.server;
+package com.heliosapm.asyncjmx.shared;
 
 /**
- * <p>Title: JMXOpDecodeStep</p>
- * <p>Description: Replay decoder enum for JMX Op Decodes</p> 
+ * <p>Title: JMXResponseWrapper</p>
+ * <p>Description: A local wrapper for passing JMX op responses</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.asyncjmx.server.JMXOpDecodeStep</code></p>
+ * <p><code>com.heliosapm.asyncjmx.shared.JMXResponseWrapper</code></p>
  */
 
-public enum JMXOpDecodeStep {
-	/** The one byte op code */
-	OPCODE,
-	/** The one int request id */
-	REQUESTID,
-	/** The op args */
-	ARGS;
-
+public class JMXResponseWrapper {
+	/** The id of the request id this response is responding to */
+	protected int responseId;
+	/** The response value */
+	protected Object response = null;
+	/** The void indicator */
+	protected byte wasVoid;
+	
+	
+	/**
+	 * Creates a new JMXResponseWrapper
+	 * @param responseId The id of the request id this response is responding to
+	 * @param response The response value
+	 */
+	public JMXResponseWrapper(int responseId, Object response) {
+		this.responseId = responseId;
+		this.response = response;
+		wasVoid = 0;
+	}
+	
+	public JMXResponseWrapper(int responseId) {
+		this.responseId = responseId;
+		wasVoid = 1;
+	}
+	
+	
 }

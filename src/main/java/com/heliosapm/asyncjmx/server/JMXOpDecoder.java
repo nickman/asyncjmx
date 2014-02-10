@@ -25,9 +25,13 @@
 package com.heliosapm.asyncjmx.server;
 
 import org.jboss.netty.buffer.ChannelBuffer;
+import org.jboss.netty.buffer.ChannelBufferInputStream;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelHandlerContext;
 import org.jboss.netty.handler.codec.replay.ReplayingDecoder;
+
+import com.esotericsoftware.kryo.io.UnsafeInput;
+import com.heliosapm.asyncjmx.shared.KryoFactory;
 
 /**
  * <p>Title: JMXOpDecoder</p>
@@ -46,30 +50,46 @@ public class JMXOpDecoder extends  ReplayingDecoder<JMXOpDecodeStep> {
 		super(JMXOpDecodeStep.OPCODE);
 	}
 	
+	
 	/** The op invocation being decoded */
 	protected JMXOpInvocation opInvocation = null;
+	/** The chanel buffer's input stream */
+	protected ChannelBufferInputStream is = null;
+	/** The kryo input associated to the channel buffer input stream */
+	protected UnsafeInput input = null;
 	
 	@Override
 	protected Object decode(ChannelHandlerContext ctx, Channel channel, ChannelBuffer buffer, JMXOpDecodeStep state) throws Exception {
 		
 		switch(state) {
-			case OPCODE:
-				byte opCode = buffer.readByte();
-				opInvocation = new JMXOpInvocation(opCode);
+			case OPCODE:				
+				opInvocation = new JMXOpInvocation(buffer.readByte());
 				checkpoint(JMXOpDecodeStep.REQUESTID);
+			//$FALL-THROUGH$
 			case REQUESTID:
-				int  rId = buffer.readInt();
-				opInvocation.setRequestId(rId);
-				checkpoint(JMXOpDecodeStep.ARGCOUNT);
-			case ARGCOUNT:
-				break;
+				opInvocation.setRequestId(buffer.readInt());
+				checkpoint(JMXOpDecodeStep.ARGS);
+			//$FALL-THROUGH$
 			case ARGS:
-				break;
+				while(opInvocation.hasMoreArgs()) {
+					if(buffer.readByte()==0) {
+						opInvocation.appendArg(null);
+					} else {
+						if(is==null) {
+							is = new ChannelBufferInputStream(buffer);
+							input = new UnsafeInput(is);
+						}
+						opInvocation.appendArg(KryoFactory.getInstance().getKryo(channel).readClassAndObject(input));						
+					}
+				}	
+				if(is!=null) {
+					try { is.close(); } catch (Exception x) { /* No Op */ }
+				}
+				return opInvocation;
 			default:
 				throw new Error("Shouldn't reach here.");
 		
 		}
-		return null;
 	}
 
 

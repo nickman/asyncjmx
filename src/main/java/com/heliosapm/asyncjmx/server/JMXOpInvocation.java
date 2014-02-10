@@ -41,6 +41,8 @@ public class JMXOpInvocation {
 	protected Integer requestId = null;
 	/** The arguments to the JMX Op */
 	protected final Object[] args;
+	/** The arg deserialization count */
+	protected transient int deserCount = 0;
 	
 	/**
 	 * Creates a new JMXOpInvocation
@@ -66,7 +68,30 @@ public class JMXOpInvocation {
 	public Integer getRequestId() {
 		return requestId;
 	}
+
+	/**
+	 * Returns the expected number of args to read
+	 * @return the expected number of args to read
+	 */
+	public int getDeserArgCount() {
+		return args.length;
+	}
+
+	/**
+	 * Returns true if the op is expecting more args for deserialization
+	 * @return true if more args are expected, false otherwise
+	 */
+	public boolean hasMoreArgs() {
+		return deserCount<args.length; 
+	}
 	
-	
+	/**
+	 * Appends a newly deserialized argument object
+	 * @param arg a deserialized argument object
+	 */
+	public void appendArg(Object arg) {
+		args[deserCount] = arg;
+		deserCount++;		
+	}
 	
 }

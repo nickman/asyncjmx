@@ -68,13 +68,12 @@ public class JMXOpEncoder extends OneToOneEncoder {
 	@Override
 	protected Object encode(ChannelHandlerContext ctx, Channel channel, Object msg) throws Exception {
 		if(msg instanceof Object[]) {
-			Object[]  payload = (Object[])msg;
+			Object[]  payload = (Object[])msg;     // {opCode, rId, args}
 			Object[]  args = (Object[])payload[2];
 			byte opCode = (Byte)payload[0];
 			ChannelBuffer buf = ChannelBuffers.dynamicBuffer(estimateSize(opCode, payload), bufferFactory);
 			buf.writeByte(opCode);
-			buf.writeInt((Integer)payload[1]);
-			buf.writeByte(args==null ? 0 : args.length);
+			buf.writeInt((Integer)payload[1]);			
 			if(args.length > 0) {
 				ChannelBufferOutputStream out = new ChannelBufferOutputStream(buf);
 				Kryo kryo = null;
