@@ -57,6 +57,12 @@ import org.jboss.netty.channel.ChannelHandlerContext;
 import org.jboss.netty.channel.ChannelUpstreamHandler;
 import org.jboss.netty.channel.UpstreamMessageEvent;
 
+import com.heliosapm.asyncjmx.shared.JMXOpCode;
+import com.heliosapm.asyncjmx.shared.serialization.NullResult;
+import com.heliosapm.asyncjmx.shared.serialization.PlaceHolder;
+import com.heliosapm.asyncjmx.shared.serialization.VoidResult;
+import com.heliosapm.asyncjmx.unsafe.UnsafeAdapter;
+
 /**
  * <p>Title: SyncMBeanServerConnection</p>
  * <p>Description: A synchronous MBeanServerConnection implementation</p> 
@@ -88,23 +94,42 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
 	}
 	
 	/**
+	 * Writes the JMX invocation request to the remote server to invoke a void return operation
+	 * @param opCode The op code for the jmx operation being invoked
+	 * @param args The arguments to the invocation
+	 */
+	protected void writeRequest(JMXOpCode opCode, Object...args) {
+		writeRequest(VoidResult.class, opCode, args);
+	}
+	
+	
+	/**
 	 * Writes the JMX invocation request to the remote server
+	 * @param returnType The expected return type, defaults to {@link VoidResult} if null.
 	 * @param opCode The op code for the jmx operation being invoked
 	 * @param args The arguments to the invocation
 	 * @return the response to the request if sync, or null if async
 	 */
-	protected Object writeRequest(byte opCode, Object...args) {
+	@SuppressWarnings("unchecked")
+	protected <T> T writeRequest(Class<T> returnType, JMXOpCode opCode, Object...args) {
+		if(returnType==null) returnType = (Class<T>) VoidResult.class;
 		int rId = serial.incrementAndGet();
 		currentRid.set(rId);
-		channel.write(new Object[] {opCode, rId, args});
+		for(int i = 0; i < args.length; i++) {
+			if(args[i]==null) args[i] = NullResult.Instance;
+		}
+		channel.write(new Object[] {opCode.opCode, rId, args});
 		Object retValue = null;
 		try {
 			retValue = timeoutQueue.poll(timeout, TimeUnit.MILLISECONDS);
+			if(retValue instanceof PlaceHolder) return null;
+			if(retValue instanceof Throwable) {
+				UnsafeAdapter.throwException((Throwable)retValue);
+			}
+			return (T)retValue;
 		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			throw new RuntimeException(e);
 		}
-		return rId;
 	}
 	
 	/**
@@ -115,6 +140,15 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
 	public void handleUpstream(ChannelHandlerContext ctx, ChannelEvent e) throws Exception {
 		if(e!=null && e instanceof UpstreamMessageEvent) {
 			Object obj = ((UpstreamMessageEvent)e).getMessage();
+			try {
+				if(obj!=null) {
+					timeoutQueue.add(obj);
+				} else {
+					timeoutQueue.add(NullResult.Instance);
+				}
+			} catch (IllegalStateException ise) {
+				// nobody listening....
+			}
 		}		
 	}
 	
@@ -175,10 +209,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
      * talking to the MBean server.
      *
      */
-    public ObjectInstance createMBean(String className, ObjectName name)
-	    throws ReflectionException, InstanceAlreadyExistsException,
-		   MBeanRegistrationException, MBeanException,
-		   NotCompliantMBeanException, IOException;
+    public ObjectInstance createMBean(String className, ObjectName name) throws ReflectionException, InstanceAlreadyExistsException, MBeanRegistrationException, MBeanException, NotCompliantMBeanException, IOException {
+    	return writeRequest(ObjectInstance.class, JMXOpCode.CREATEMBEAN_SO, className, name);
+    }
 
     /**
      * <p>Instantiates and registers an MBean in the MBean server.  The
@@ -235,7 +268,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
 	    throws ReflectionException, InstanceAlreadyExistsException,
 		   MBeanRegistrationException, MBeanException,
 		   NotCompliantMBeanException, InstanceNotFoundException,
-		   IOException;
+		   IOException {
+    	return writeRequest(ObjectInstance.class, JMXOpCode.CREATEMBEAN_SOO, className, name);
+    }
 
 
     /**
@@ -289,7 +324,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
 				      Object params[], String signature[]) 
 	    throws ReflectionException, InstanceAlreadyExistsException,
 	    	   MBeanRegistrationException, MBeanException,
-	    	   NotCompliantMBeanException, IOException;
+	    	   NotCompliantMBeanException, IOException {
+    	return writeRequest(ObjectInstance.class, JMXOpCode.CREATEMBEAN_SOOS, className, name);
+    }
 
     /**
      * Instantiates and registers an MBean in the MBean server.  The
@@ -347,7 +384,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
 	    throws ReflectionException, InstanceAlreadyExistsException,
 	    	   MBeanRegistrationException, MBeanException,
 	    	   NotCompliantMBeanException, InstanceNotFoundException,
-	    	   IOException;
+	    	   IOException {
+    	return writeRequest(ObjectInstance.class, JMXOpCode.CREATEMBEAN_SOOOS, className, name);
+    }
 
     /**
      * Unregisters an MBean from the MBean server. The MBean is
@@ -373,7 +412,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
      */
     public void unregisterMBean(ObjectName name)
 	    throws InstanceNotFoundException, MBeanRegistrationException,
-	    	   IOException;
+	    	   IOException {
+    	writeRequest(ObjectInstance.class, JMXOpCode.UNREGISTERMBEAN, name);
+    }
 
     /**
      * Gets the <CODE>ObjectInstance</CODE> for a given MBean
@@ -392,7 +433,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
      * talking to the MBean server.
      */
     public ObjectInstance getObjectInstance(ObjectName name)
-	    throws InstanceNotFoundException, IOException;
+	    throws InstanceNotFoundException, IOException {
+    	return writeRequest(ObjectInstance.class, JMXOpCode.GETOBJECTINSTANCE, name);
+    }
 
     /**
      * Gets MBeans controlled by the MBean server. This method allows
@@ -420,8 +463,11 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
      * @exception IOException A communication problem occurred when
      * talking to the MBean server.
      */
-    public Set<ObjectInstance> queryMBeans(ObjectName name, QueryExp query)
-	    throws IOException;
+    @SuppressWarnings("unchecked")
+	public Set<ObjectInstance> queryMBeans(ObjectName name, QueryExp query)
+	    throws IOException {
+    	return (Set<ObjectInstance>) writeRequest(JMXOpCode.QUERYMBEANS.returnType, JMXOpCode.QUERYMBEANS, name, query);
+    }
 
     /**
      * Gets the names of MBeans controlled by the MBean server. This
@@ -448,8 +494,11 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
      * @exception IOException A communication problem occurred when
      * talking to the MBean server.
      */
-    public Set<ObjectName> queryNames(ObjectName name, QueryExp query)
-	    throws IOException;
+    @SuppressWarnings("unchecked")
+	public Set<ObjectName> queryNames(ObjectName name, QueryExp query)
+	    throws IOException {
+    	return (Set<ObjectName>) writeRequest(JMXOpCode.QUERYNAMES.returnType, JMXOpCode.QUERYNAMES, name, query);
+    }
 
 
 
@@ -469,7 +518,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
      * talking to the MBean server.
      */
     public boolean isRegistered(ObjectName name)
-	    throws IOException;
+	    throws IOException {
+    	return writeRequest(Boolean.class, JMXOpCode.ISREGISTERED, name);
+    }
 
 
     /**
@@ -481,7 +532,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
      * talking to the MBean server.
      */
     public Integer getMBeanCount()
-	    throws IOException;
+	    throws IOException {
+    	return writeRequest(Integer.class, JMXOpCode.GETMBEANCOUNT);
+    }
 
     /**
      * Gets the value of a specific attribute of a named MBean. The MBean
@@ -514,8 +567,10 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
      */
     public Object getAttribute(ObjectName name, String attribute)
 	    throws MBeanException, AttributeNotFoundException,
-	    	   InstanceNotFoundException, ReflectionException,
-	    	   IOException;
+	    	ReflectionException, InstanceNotFoundException,
+	    	   IOException {
+    	return writeRequest(Object.class, JMXOpCode.GETATTRIBUTE, name, attribute);
+    }
 
 
     /**
@@ -542,7 +597,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
      */
     public AttributeList getAttributes(ObjectName name, String[] attributes)
 	    throws InstanceNotFoundException, ReflectionException,
-		   IOException;
+		   IOException {
+    	return writeRequest(AttributeList.class, JMXOpCode.GETATTRIBUTES, name, attributes);
+    }
 
     /**
      * Sets the value of a specific attribute of a named MBean. The MBean
@@ -576,7 +633,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
     public void setAttribute(ObjectName name, Attribute attribute)
 	    throws InstanceNotFoundException, AttributeNotFoundException,
 		   InvalidAttributeValueException, MBeanException, 
-		   ReflectionException, IOException;
+		   ReflectionException, IOException {
+    	writeRequest(JMXOpCode.SETATTRIBUTE, name, attribute);
+    }
 
 
 
@@ -606,7 +665,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
      */
     public AttributeList setAttributes(ObjectName name,
 				       AttributeList attributes)
-	throws InstanceNotFoundException, ReflectionException, IOException;
+	throws InstanceNotFoundException, ReflectionException, IOException {
+    	return writeRequest(AttributeList.class, JMXOpCode.SETATTRIBUTES, name, attributes);
+    }
 
     /**
      * Invokes an operation on an MBean.
@@ -638,7 +699,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
     public Object invoke(ObjectName name, String operationName,
 			 Object params[], String signature[])
 	    throws InstanceNotFoundException, MBeanException,
-		   ReflectionException, IOException;
+		   ReflectionException, IOException {
+    	return writeRequest(Object.class, JMXOpCode.INVOKE, name, operationName, params, signature);
+    }
  
 
   
@@ -653,7 +716,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
      * talking to the MBean server.
      */
     public String getDefaultDomain()
-	    throws IOException;
+	    throws IOException {
+    	return writeRequest(String.class, JMXOpCode.GETDEFAULTDOMAIN);
+    }
 
     /**
      * <p>Returns the list of domains in which any MBean is currently
@@ -671,7 +736,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
      * @since.unbundled JMX 1.2
      */
     public String[] getDomains()
-	    throws IOException;
+	    throws IOException {
+    	return writeRequest(String[].class, JMXOpCode.GETDOMAINS);
+    }
 
     /**
      * <p>Adds a listener to a registered MBean.</p>
@@ -703,7 +770,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
 					NotificationListener listener,
 					NotificationFilter filter,
 					Object handback)
-	    throws InstanceNotFoundException, IOException;
+	    throws InstanceNotFoundException, IOException {
+    	writeRequest(JMXOpCode.ADDNOTIFICATIONLISTENER_ONNO, name, listener, filter, handback);
+    }
 
 
     /**
@@ -747,7 +816,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
 					ObjectName listener,
 					NotificationFilter filter,
 					Object handback)
-	    throws InstanceNotFoundException, IOException;
+	    throws InstanceNotFoundException, IOException {
+    	writeRequest(JMXOpCode.ADDNOTIFICATIONLISTENER_OONO, name, listener, filter, handback);
+    }
 
 
     /**
@@ -774,7 +845,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
     public void removeNotificationListener(ObjectName name,
 					   ObjectName listener) 
 	throws InstanceNotFoundException, ListenerNotFoundException,
-	       IOException;
+	       IOException {
+    	writeRequest(JMXOpCode.REMOVENOTIFICATIONLISTENER_OO, name, listener);
+    }
 
     /**
      * <p>Removes a listener from a registered MBean.</p>
@@ -814,7 +887,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
 					   NotificationFilter filter,
 					   Object handback)
 	    throws InstanceNotFoundException, ListenerNotFoundException,
-		   IOException;
+		   IOException {
+    	writeRequest(JMXOpCode.REMOVENOTIFICATIONLISTENER_OONO, name, listener, filter, handback);
+    }
 
 
     /**
@@ -841,7 +916,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
     public void removeNotificationListener(ObjectName name,
 					   NotificationListener listener)
 	    throws InstanceNotFoundException, ListenerNotFoundException,
-		   IOException;
+		   IOException {
+    	writeRequest(JMXOpCode.REMOVENOTIFICATIONLISTENER_ON, name, listener);
+    }
 
     /**
      * <p>Removes a listener from a registered MBean.</p>
@@ -881,7 +958,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
 					   NotificationFilter filter,
 					   Object handback)
 	    throws InstanceNotFoundException, ListenerNotFoundException,
-		   IOException;
+		   IOException {
+    	writeRequest(JMXOpCode.REMOVENOTIFICATIONLISTENER_ONNO, name, listener, filter, handback);
+    }
 
     /**
      * This method discovers the attributes and operations that an
@@ -903,7 +982,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
      */
     public MBeanInfo getMBeanInfo(ObjectName name)
 	    throws InstanceNotFoundException, IntrospectionException,
-	    	   ReflectionException, IOException;
+	    	   ReflectionException, IOException {
+    	return writeRequest(MBeanInfo.class, JMXOpCode.GETMBEANINFO, name);
+    }
 
  
     /**
@@ -943,6 +1024,8 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
      * @see Class#isInstance
      */
     public boolean isInstanceOf(ObjectName name, String className)
-	    throws InstanceNotFoundException, IOException;
+	    throws InstanceNotFoundException, IOException {
+    	return writeRequest(Boolean.class, JMXOpCode.ISINSTANCEOF, name, className);
+    }
 
 }

@@ -24,16 +24,43 @@
  */
 package com.heliosapm.asyncjmx.shared;
 
+import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import javax.management.Attribute;
+import javax.management.AttributeList;
+import javax.management.AttributeNotFoundException;
+import javax.management.InstanceAlreadyExistsException;
+import javax.management.InstanceNotFoundException;
+import javax.management.IntrospectionException;
+import javax.management.InvalidAttributeValueException;
+import javax.management.ListenerNotFoundException;
+import javax.management.MBeanException;
+import javax.management.MBeanInfo;
+import javax.management.MBeanRegistrationException;
+import javax.management.NotCompliantMBeanException;
+import javax.management.NotificationFilter;
+import javax.management.NotificationListener;
+import javax.management.ObjectInstance;
+import javax.management.ObjectName;
+import javax.management.QueryExp;
+import javax.management.ReflectionException;
 
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelLocal;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
+import com.esotericsoftware.kryo.io.Input;
+import com.heliosapm.asyncjmx.shared.serialization.NonSerializable;
+import com.heliosapm.asyncjmx.shared.serialization.NullResult;
+import com.heliosapm.asyncjmx.shared.serialization.ObjectNameSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.VoidResult;
 
 /**
  * <p>Title: KryoFactory</p>
@@ -56,19 +83,10 @@ public class KryoFactory {
 	private final Map<Class<?>, Serializer<?>> registeredSerializers = new ConcurrentHashMap<Class<?>, Serializer<?>>();
 	
 	/** A channel local for channel dedicated Kryo instances */
-	protected final ChannelLocal<Kryo> channelKryo = new ChannelLocal<Kryo>(){
+	protected final ChannelLocal<Kryo> channelKryo = new ChannelLocal<Kryo>(true){
 		@Override
 		protected Kryo initialValue(Channel channel) {
-			Kryo kryo = new Kryo();
-			for(Map.Entry<Integer, Class<?>> entry: registeredClasses.entrySet()) {
-				Serializer<?> ser = registeredSerializers.get(entry.getValue());
-				if(ser!=null) {
-					kryo.register(entry.getValue(), ser, entry.getKey());
-				} else {
-					kryo.register(entry.getValue(), entry.getKey());
-				}
-			}
-			return kryo;
+			return newKryo();
 		}
 	};	
 	
@@ -105,6 +123,31 @@ public class KryoFactory {
 	}
 	
 	/**
+	 * Returns a new initialized Kryo instance
+	 * @return a new initialized Kryo instance
+	 */
+	public Kryo newKryo() {
+		Kryo kryo = new Kryo();
+		for(Map.Entry<Class<?>, Serializer<?>> entry: REG_CLASS_SERIALIZERS.entrySet()) {
+			kryo.register(entry.getKey(), entry.getValue());
+		}
+
+		for(Class<?> clazz: REG_CLASSES) {
+			kryo.register(clazz);
+		}
+		
+		for(Map.Entry<Integer, Class<?>> entry: registeredClasses.entrySet()) {
+			Serializer<?> ser = registeredSerializers.get(entry.getValue());
+			if(ser!=null) {
+				kryo.register(entry.getValue(), ser, entry.getKey());
+			} else {
+				kryo.register(entry.getValue(), entry.getKey());
+			}
+		}		
+		return kryo;
+	}
+	
+	/**
 	 * Registers a new class with Kryo
 	 * @param clazz The class to register
 	 * @param ser An optional serializer to register for the class
@@ -130,5 +173,39 @@ public class KryoFactory {
 	public void registerClass(Class<?> clazz) {
 		registerClass(clazz, null);
 	}
+	
+	/** A map to associate the statically registered serializers to the classes they serialize for */
+	private static final Map<Class<?>, Serializer<?>> REG_CLASS_SERIALIZERS = new HashMap<Class<?>, Serializer<?>>();
+
+	/** Don't change this order unless you know what you're doing */
+	private static final Serializer<?>[] REG_SERIALIZERS = {
+		new ObjectNameSerializer()
+	};
+	
+	static {
+		for(Serializer<?> ser: REG_SERIALIZERS) {
+			try {
+				//read(Kryo kryo, Input input, Class<ObjectName> type)
+				Class<?> clazz = ser.getClass().getDeclaredMethod("read", Kryo.class, Input.class, Class.class).getReturnType();
+				REG_CLASS_SERIALIZERS.put(clazz, ser);
+			} catch (Exception ex) {
+				throw new RuntimeException("Failed to resolve serializer [" + ser.getClass().getName() + "]", ex);
+			}
+		}
+	}
+	
+	
+	/** Don't change this order unless you know what you're doing */
+	private static final Class<?>[] REG_CLASSES = {
+		NullResult.class, VoidResult.class, NonSerializable.class, IntrospectionException.class, 
+		NotCompliantMBeanException.class, Set.class, ReflectionException.class, 
+		IOException.class, ListenerNotFoundException.class, MBeanException.class, 
+		ObjectName.class, String[].class, Object[].class, InstanceNotFoundException.class, 
+		AttributeList.class, MBeanInfo.class, MBeanRegistrationException.class, QueryExp.class, 
+		ObjectInstance.class, Attribute.class, InstanceAlreadyExistsException.class, InvalidAttributeValueException.class, 
+		NotificationListener.class, AttributeNotFoundException.class, String.class, NotificationFilter.class		
+	};
+	
+	//ObjectInstance createMBean(String className, ObjectName name) throws ReflectionException, InstanceAlreadyExistsException, MBeanRegistrationException, MBeanException, NotCompliantMBeanException, IOException {
 	
 }
