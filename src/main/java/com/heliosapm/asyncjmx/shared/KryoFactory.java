@@ -51,14 +51,20 @@ import javax.management.ObjectName;
 import javax.management.QueryExp;
 import javax.management.ReflectionException;
 
+import org.jboss.netty.buffer.ChannelBuffer;
+import org.jboss.netty.buffer.ChannelBufferOutputStream;
+import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelLocal;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+import com.heliosapm.asyncjmx.shared.serialization.AttributeSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.NonSerializable;
 import com.heliosapm.asyncjmx.shared.serialization.NullResult;
+import com.heliosapm.asyncjmx.shared.serialization.ObjectInstanceSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.ObjectNameSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.VoidResult;
 
@@ -82,6 +88,12 @@ public class KryoFactory {
 	/** Serializers associated to specific classes */
 	private final Map<Class<?>, Serializer<?>> registeredSerializers = new ConcurrentHashMap<Class<?>, Serializer<?>>();
 	
+	/** A {@link VoidResult} serialized into a ChannelBuffer */
+	private final ChannelBuffer voidResultBuffer;
+	/** A {@link NullResult} serialized into a ChannelBuffer */
+	private final ChannelBuffer nullResultBuffer;
+	
+	
 	/** A channel local for channel dedicated Kryo instances */
 	protected final ChannelLocal<Kryo> channelKryo = new ChannelLocal<Kryo>(true){
 		@Override
@@ -101,15 +113,41 @@ public class KryoFactory {
 					instance = new KryoFactory();
 				}
 			}
-		}
+		}		
 		return instance;
+	}
+	
+
+	
+	/**
+	 * Returns a shrink-wrapped ChannelBuffer containing the passed object Kryo serialized  
+	 * @param kryo The kryo to serialize with
+	 * @param obj The object to serialize
+	 * @return The ChannelBuffer containing the serialized object
+	 */
+	private ChannelBuffer serialize(Kryo kryo, Object obj) {
+		try {
+			ChannelBuffer cb = ChannelBuffers.dynamicBuffer();
+			ChannelBufferOutputStream cbos = new ChannelBufferOutputStream(cb);
+			Output out = new Output(cbos);
+			kryo.writeClassAndObject(out, obj);
+			out.flush();
+			cbos.flush();
+			return ChannelBuffers.wrappedBuffer(cb.array());
+		} catch (Exception ex) {
+			throw new RuntimeException("Failed to serialize object [" + obj + "]", ex);
+		}
+		
+		
 	}
 	
 	/**
 	 * Creates a new KryoFactory
 	 */
 	private KryoFactory() {
-		
+		Kryo k = newKryo();
+		voidResultBuffer = ChannelBuffers.unmodifiableBuffer(serialize(k, VoidResult.Instance));
+		nullResultBuffer = ChannelBuffers.unmodifiableBuffer(serialize(k, NullResult.Instance));
 	}
 	
 	/**
@@ -123,11 +161,47 @@ public class KryoFactory {
 	}
 	
 	/**
+	 * Returns a serialized VoidResult instance
+	 * @return a ChannelBuffer containing a serialized VoidResult instance
+	 */
+	public ChannelBuffer getVoidResult() {
+		return ChannelBuffers.copiedBuffer(voidResultBuffer);
+	}
+	
+	/**
+	 * Returns a serialized NullResult instance
+	 * @return a ChannelBuffer containing a serialized NullResult instance
+	 */
+	public ChannelBuffer getNullResult() {
+		return ChannelBuffers.copiedBuffer(nullResultBuffer);
+	}
+	
+	/**
+	 * Serializes the passed object to a NonSerializable instance in a ChannelBuffer
+	 * @param kryo The kryo to use. If null, a new one will be created
+	 * @param obj The object to serialized a NonSerializable for
+	 * @return A ChannelBuffer containing a NonSerializable for the passed object 
+	 */
+	public ChannelBuffer getNonSerializable(Kryo kryo, Object obj) {
+		return serialize(kryo==null ? newKryo() : kryo, new NonSerializable(obj));
+	}
+	
+	/**
+	 * Serializes the passed object to a NonSerializable instance in a ChannelBuffer
+	 * @param obj The object to serialized a NonSerializable for
+	 * @return A ChannelBuffer containing a NonSerializable for the passed object 
+	 */
+	public ChannelBuffer getNonSerializable(Object obj) {
+		return getNonSerializable(null, obj);
+	}
+	
+	/**
 	 * Returns a new initialized Kryo instance
 	 * @return a new initialized Kryo instance
 	 */
 	public Kryo newKryo() {
 		Kryo kryo = new Kryo();
+		kryo.setAsmEnabled(true);
 		for(Map.Entry<Class<?>, Serializer<?>> entry: REG_CLASS_SERIALIZERS.entrySet()) {
 			kryo.register(entry.getKey(), entry.getValue());
 		}
@@ -179,7 +253,7 @@ public class KryoFactory {
 
 	/** Don't change this order unless you know what you're doing */
 	private static final Serializer<?>[] REG_SERIALIZERS = {
-		new ObjectNameSerializer()
+		new ObjectNameSerializer(), new ObjectInstanceSerializer(), new AttributeSerializer()
 	};
 	
 	static {

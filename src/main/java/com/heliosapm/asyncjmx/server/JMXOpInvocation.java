@@ -24,7 +24,11 @@
  */
 package com.heliosapm.asyncjmx.server;
 
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+
 import com.heliosapm.asyncjmx.shared.JMXOpCode;
+import com.heliosapm.asyncjmx.shared.serialization.PlaceHolder;
 
 /**
  * <p>Title: JMXOpInvocation</p>
@@ -36,13 +40,18 @@ import com.heliosapm.asyncjmx.shared.JMXOpCode;
 
 public class JMXOpInvocation {
 	/** The decoded op code */
-	protected final JMXOpCode opCode;
+	public final JMXOpCode opCode;
 	/** The request ID */
 	protected Integer requestId = null;
 	/** The arguments to the JMX Op */
 	protected final Object[] args;
 	/** The arg deserialization count */
 	protected transient int deserCount = 0;
+	/** The default domain of the MBeanServer to invoke against */
+	protected String jmxDomain = null;
+	
+	/** The default domain of the default MBeanServer to invoke against */
+	public static final String DEFAULT_MBEANSERVER_DOMAIN = "DefaultDomain";
 	
 	/**
 	 * Creates a new JMXOpInvocation
@@ -92,6 +101,53 @@ public class JMXOpInvocation {
 	public void appendArg(Object arg) {
 		args[deserCount] = arg;
 		deserCount++;		
+	}
+
+	/**
+	 * Returns the default domain of the MBeanServer to invoke against
+	 * @return the jmxDomain the default domain of the target MBeanServer 
+	 */
+	public String getJmxDomain() {
+		return jmxDomain!=null ? jmxDomain : DEFAULT_MBEANSERVER_DOMAIN;
+	}
+
+	/**
+	 * Returns the arguments to the JMX Op
+	 * @return an array of arguments
+	 */
+	public Object[] getArgs() {
+		return args;
+	}
+	
+	/**
+	 * @return
+	 */
+	public DynamicTypedIterator getArgumentIterator() {
+		return new DynamicTypedIterator();
+	}
+	
+	public class DynamicTypedIterator {
+		int index = 0;
+		final int argCnt = args.length;
+
+		public boolean hasNext() {
+			return index < argCnt;
+		}
+		
+		public <T> T next(Class<T> type) throws NoSuchElementException, IllegalStateException {
+			if(index >= argCnt) {
+				throw new NoSuchElementException();
+			}
+			try {
+				Object o = args[index];
+				if(o!=null && o instanceof PlaceHolder) {
+					return null;
+				}
+				return (T)args[index];
+			} finally {
+				index++;
+			}
+		}
 	}
 	
 }

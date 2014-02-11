@@ -22,7 +22,7 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.asyncjmx.server;
+package com.heliosapm.asyncjmx.server.serialization;
 
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBufferInputStream;
@@ -31,6 +31,7 @@ import org.jboss.netty.channel.ChannelHandlerContext;
 import org.jboss.netty.handler.codec.replay.ReplayingDecoder;
 
 import com.esotericsoftware.kryo.io.UnsafeInput;
+import com.heliosapm.asyncjmx.server.JMXOpInvocation;
 import com.heliosapm.asyncjmx.shared.KryoFactory;
 
 /**
@@ -38,7 +39,7 @@ import com.heliosapm.asyncjmx.shared.KryoFactory;
  * <p>Description: The JMX Op Decoder</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.asyncjmx.server.JMXOpDecoder</code></p>
+ * <p><code>com.heliosapm.asyncjmx.server.serialization.JMXOpDecoder</code></p>
  */
 
 public class JMXOpDecoder extends  ReplayingDecoder<JMXOpDecodeStep> {

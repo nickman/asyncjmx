@@ -26,6 +26,7 @@ package com.heliosapm.asyncjmx.client;
 
 import org.jboss.netty.channel.ChannelPipeline;
 import org.jboss.netty.channel.ChannelPipelineFactory;
+import org.jboss.netty.channel.ChannelUpstreamHandler;
 import org.jboss.netty.channel.Channels;
 
 /**
@@ -39,6 +40,28 @@ import org.jboss.netty.channel.Channels;
 public class JMXClientPipelineFactory implements ChannelPipelineFactory {
 	/** The JMX Op enconding initiating handler */
 	protected final JMXOpEncoder opEncoder = new JMXOpEncoder();
+	/** The new connection handler */
+	protected final ChannelUpstreamHandler connectionHandler;
+
+	
+	//===========================================================================================
+	//		Channel Handler Names
+	//===========================================================================================
+	/** The new connection handler  */
+	public static final String NEWCONN_HANDLER = "connHandler";
+	/** The JMX Op Encoder  */
+	public static final String JMXOP_ENCODER = "opEncoder";
+	/** The JMX Response Decoder  */
+	public static final String JMXOP_DECODER = "opDecoder";
+	
+	
+	/**
+	 * Creates a new JMXClientPipelineFactory
+	 * @param connectionHandler The new connection handler
+	 */
+	JMXClientPipelineFactory(ChannelUpstreamHandler connectionHandler) {
+		this.connectionHandler = connectionHandler;
+	}
 	
 	/**
 	 * {@inheritDoc}
@@ -47,7 +70,10 @@ public class JMXClientPipelineFactory implements ChannelPipelineFactory {
 	@Override
 	public ChannelPipeline getPipeline() throws Exception {
 		ChannelPipeline pipeline = Channels.pipeline();
-		pipeline.addLast("opencoder", opEncoder);
+		//pipeline.addLast("log", new LoggingHandler(InternalLogLevel.INFO, true));
+		pipeline.addLast(NEWCONN_HANDLER, connectionHandler);
+		pipeline.addLast(JMXOP_ENCODER, opEncoder);
+		pipeline.addLast(JMXOP_DECODER, new JMXResponseDecoder());
 		return pipeline;
 	}
 

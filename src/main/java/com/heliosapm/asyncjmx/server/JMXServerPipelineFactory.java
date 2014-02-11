@@ -27,14 +27,29 @@ package com.heliosapm.asyncjmx.server;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
 
+import javax.net.ssl.SSLEngine;
+
 import org.jboss.netty.channel.ChannelPipeline;
 import org.jboss.netty.channel.ChannelPipelineFactory;
+import org.jboss.netty.channel.ChannelUpstreamHandler;
 import org.jboss.netty.channel.Channels;
+import org.jboss.netty.handler.execution.ExecutionHandler;
+import org.jboss.netty.handler.execution.OrderedMemoryAwareThreadPoolExecutor;
 import org.jboss.netty.handler.logging.LoggingHandler;
+import org.jboss.netty.handler.ssl.SslBufferPool;
+import org.jboss.netty.handler.ssl.SslHandler;
 import org.jboss.netty.logging.InternalLogLevel;
+import org.jboss.netty.util.HashedWheelTimer;
+import org.jboss.netty.util.Timer;
+
+import com.heliosapm.asyncjmx.server.serialization.JMXOpDecoder;
+import com.heliosapm.asyncjmx.server.serialization.JMXResponseEncoder;
+import com.heliosapm.asyncjmx.server.ssl.SecureJMXSslContextFactory;
 
 /**
  * <p>Title: JMXServerPipelineFactory</p>
@@ -51,18 +66,52 @@ public class JMXServerPipelineFactory implements ChannelPipelineFactory {
 	 * Executor Handler
 	 * Logging Handler
 	 * Deserialization Handler
+	 * JMX Auth Handler
 	 * JMX Invoker Handler
 	 */
 	
+	
+	/** The logger name of the installed logging handler */
+	public final String LOG_NAME;
+
 	/** A map of a few differently configured logging handlers that can be activated via JMX */
 	protected final Map<String, LoggingHandler> loggingHandlers;
 	/** The currently installed logging handler config */
-	protected final AtomicReference<String> loggingConfigName = new AtomicReference<String>(DEFAULT_LOGGER);
+	protected final AtomicReference<String> loggingConfigName = new AtomicReference<String>(LOGGER_HEX_INFO);
 	/** Instance logger for handling log requests from the logging handler */
-	protected final Logger log = Logger.getLogger(LOG_NAME);
+	protected final Logger log;
+	/** The async execution handler */
+	protected final ExecutionHandler executionHandler;
+	/** The JMX Op Response Encoder */
+	protected final JMXResponseEncoder responseEncoder;
+	/** New connection handler */
+	protected final ChannelUpstreamHandler connHandler;
+	/** The JMX invocation handler */
+	protected final JMXMBeanServerInvocationHandler jmxInvocationHandler;
+	/** Indicates if this is an SSL server or not */
+	protected final boolean SSL;
 	
-	/** The logger name of the installed logging handler */
-	public static final String LOG_NAME = "AJMX";
+	// ==================================================================================================================
+	//		SSL Server Constructs
+	// ==================================================================================================================	
+	/** The SSL engine */
+	protected final SSLEngine sslEngine;
+	/** The SSL buffer pool */
+	protected final SslBufferPool sslBufferPool;
+	/** The SSL negotiation timeout timer */
+	protected final Timer sslTimer;
+	/** The SSL start tls flag which is true if the first write request shouldn't be encrypted by the SSLEngine */
+	protected final boolean startTls;
+	/** The SSL handshake delegation executor */
+	protected final ThreadPoolExecutor sslExecutor;
+	/** The SSL handshake timeout in ms. */
+	protected final long handshakeTimeoutInMillis;
+	
+	
+	// ==================================================================================================================
+	//		Logger Config Names
+	// ==================================================================================================================
+	
 	/** A logging handler config with a level of INFO and hex enabled */
 	public static final String LOGGER_HEX_INFO = "HexInfo";
 	/** A logging handler config with a level of DEBUG and hex enabled */
@@ -75,13 +124,74 @@ public class JMXServerPipelineFactory implements ChannelPipelineFactory {
 	public static final String LOGGER_NULL = "NoLogger";
 	/** The default logger name */
 	public static final String DEFAULT_LOGGER = LOGGER_DEBUG;
+
+	
+	// ==================================================================================================================
+	//		Handler Binding Names
+	// ==================================================================================================================
+	
+	/** The name that SSL handlers are registered with the pipeline under */
+	public static final String SSL_HANDLER_NAME = "ssl";	
 	/** The name that the currently configured logging handler is registered with the pipeline under */
 	public static final String LOGGING_HANDLER_NAME = "logging";
+	/** The name that the execution handler is registered with the pipeline under */
+	public static final String EXEC_HANDLER_NAME = "exec";
+	/** The name that JMX Op Decoding Handlers are registered with the pipeline under */
+	public static final String JMXOPDECODE_HANDLER_NAME = "jmxopdecode";	
+	/** The name that the JMX Server Invocation Handler is registered with the pipeline under */
+	public static final String JMXINVOCATION_HANDLER_NAME = "jmxinvoker";	
+	/** The name that the JMX Response Encoder is registered with the pipeline under */
+	public static final String JMXRERSPONSE_ENCODER_NAME = "jmxresenconder";
+	/** The name that the connectiuon handler is registered with the pipeline under */
+	public static final String CONN_HANDLER_NAME = "connhandler";	
 	
-	JMXServerPipelineFactory() {
-		loggingHandlers = initLogHandlers();
+	
+	// ==================================================================================================================
+	//		Server Names
+	// ==================================================================================================================	
+	
+	/** The server name when using plain TCP sockets */
+	public static final String TCP_SERVER_NAME = "ajmx";
+	/** The server name when using SSL TCP sockets */
+	public static final String SSL_SERVER_NAME = "ajmxs";
+	
+	/**
+	 * Creates a new standard TCP socket JMXServerPipelineFactory
+	 */
+	JMXServerPipelineFactory(ChannelUpstreamHandler connHandler) {
+		this(connHandler, false, -1L);
 	}
 	
+	/**
+	 * Creates a new SSL/TCP JMXServerPipelineFactory
+	 * @param startTls true if the first write request shouldn't be encrypted by the SSLEngine
+	 * @param handshakeTimeoutInMillis the time in milliseconds after whic the handshake() will be failed, and so the future notified
+	 */
+	JMXServerPipelineFactory(ChannelUpstreamHandler connHandler, boolean startTls, long handshakeTimeoutInMillis) {
+		SSL = handshakeTimeoutInMillis >= 0;
+		this.handshakeTimeoutInMillis = handshakeTimeoutInMillis;
+		LOG_NAME = SSL ? TCP_SERVER_NAME : SSL_SERVER_NAME;
+		log = Logger.getLogger(LOG_NAME);
+		loggingHandlers = initLogHandlers();
+		executionHandler = new ExecutionHandler(new OrderedMemoryAwareThreadPoolExecutor(16, 1048576, 1048576));
+		responseEncoder = new JMXResponseEncoder();
+		jmxInvocationHandler = JMXMBeanServerInvocationHandler.getInstance();
+		this.connHandler = connHandler;
+		if(SSL) {
+			sslEngine = SecureJMXSslContextFactory.getServerContext().createSSLEngine();
+			sslEngine.setUseClientMode(false);			
+			sslBufferPool = new SslBufferPool();
+			sslTimer = new HashedWheelTimer();
+			this.startTls = startTls;
+			sslExecutor = (ThreadPoolExecutor)Executors.newCachedThreadPool();
+		} else {
+			sslEngine = null;
+			sslBufferPool = null;
+			sslTimer = null;
+			this.startTls = false;
+			sslExecutor = null;
+		}
+	}
 	
 	/**
 	 * {@inheritDoc}
@@ -89,12 +199,21 @@ public class JMXServerPipelineFactory implements ChannelPipelineFactory {
 	 */
 	@Override
 	public ChannelPipeline getPipeline() throws Exception {
-		ChannelPipeline pipeline = Channels.pipeline();
-		
-		LoggingHandler loggingHandler = loggingHandlers.get(loggingConfigName.get());
+		ChannelPipeline pipeline = Channels.pipeline();		
+		if(SSL) {
+			pipeline.addLast(SSL_HANDLER_NAME, new SslHandler(sslEngine, sslBufferPool, startTls, sslExecutor, sslTimer, handshakeTimeoutInMillis));
+		}
+		LoggingHandler loggingHandler = loggingHandlers.get(loggingConfigName.get());		
 		if(loggingHandler!=null) {
 			pipeline.addLast(LOGGING_HANDLER_NAME, loggingHandler);
 		}
+		pipeline.addLast(CONN_HANDLER_NAME, connHandler);
+		pipeline.addLast(EXEC_HANDLER_NAME, executionHandler);
+		pipeline.addLast(JMXOPDECODE_HANDLER_NAME, new JMXOpDecoder());
+		pipeline.addLast(JMXRERSPONSE_ENCODER_NAME, this.responseEncoder);
+		pipeline.addLast(JMXINVOCATION_HANDLER_NAME, jmxInvocationHandler);
+		// <-----  and back down again ------ >
+		
 		return pipeline;
 	}
 

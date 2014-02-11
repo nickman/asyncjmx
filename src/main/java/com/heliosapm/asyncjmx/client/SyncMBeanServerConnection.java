@@ -42,6 +42,7 @@ import javax.management.MBeanException;
 import javax.management.MBeanInfo;
 import javax.management.MBeanRegistration;
 import javax.management.MBeanRegistrationException;
+import javax.management.MBeanServerConnection;
 import javax.management.NotCompliantMBeanException;
 import javax.management.NotificationFilter;
 import javax.management.NotificationListener;
@@ -71,7 +72,7 @@ import com.heliosapm.asyncjmx.unsafe.UnsafeAdapter;
  * <p><code>com.heliosapm.asyncjmx.client.SyncMBeanServerConnection</code></p>
  */
 
-public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
+public class SyncMBeanServerConnection implements MBeanServerConnection, ChannelUpstreamHandler {
 	/** The connection to the JMX server */
 	protected final Channel channel;
 	/** The timeout for JMX invocations in ms */
@@ -82,6 +83,9 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
 	protected final SynchronousQueue<Object> timeoutQueue = new SynchronousQueue<Object>();
 	/** The current rid we're waiting on */
 	protected final AtomicInteger currentRid = new AtomicInteger(0);
+	
+	/** The name of the handler in the pipeline */
+	public static final String RESPONSE_HANDLER_NAME = "responseHandler";
 	
 	/**
 	 * Creates a new AsyncMBeanServerConnection
@@ -121,6 +125,8 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
 		channel.write(new Object[] {opCode.opCode, rId, args});
 		Object retValue = null;
 		try {
+			//channel.getPipeline().addAfter(JMXClientPipelineFactory.JMXOP_DECODER, RESPONSE_HANDLER_NAME, this);
+			channel.getPipeline().addLast(RESPONSE_HANDLER_NAME, this);
 			retValue = timeoutQueue.poll(timeout, TimeUnit.MILLISECONDS);
 			if(retValue instanceof PlaceHolder) return null;
 			if(retValue instanceof Throwable) {
@@ -129,6 +135,8 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
 			return (T)retValue;
 		} catch (InterruptedException e) {
 			throw new RuntimeException(e);
+		} finally {
+			channel.getPipeline().remove(this);
 		}
 	}
 	
@@ -142,7 +150,17 @@ public class SyncMBeanServerConnection implements ChannelUpstreamHandler {
 			Object obj = ((UpstreamMessageEvent)e).getMessage();
 			try {
 				if(obj!=null) {
-					timeoutQueue.add(obj);
+					if(obj instanceof JMXOpResponse) {
+						Object response = ((JMXOpResponse)obj).getResponse();
+						if(response==null) {
+							timeoutQueue.add(response);
+						} else {
+							timeoutQueue.add(NullResult.Instance);
+						}
+						
+					} else {
+						timeoutQueue.add(new Exception("Unexpected internal type returned [" + obj + "]"));
+					}					
 				} else {
 					timeoutQueue.add(NullResult.Instance);
 				}

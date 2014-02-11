@@ -22,14 +22,14 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.asyncjmx.server;
+package com.heliosapm.asyncjmx.server.serialization;
 
 /**
  * <p>Title: JMXOpDecodeStep</p>
  * <p>Description: Replay decoder enum for JMX Op Decodes</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.asyncjmx.server.JMXOpDecodeStep</code></p>
+ * <p><code>com.heliosapm.asyncjmx.server.serialization.JMXOpDecodeStep</code></p>
  */
 
 public enum JMXOpDecodeStep {
