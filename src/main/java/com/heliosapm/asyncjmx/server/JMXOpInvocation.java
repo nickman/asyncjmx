@@ -95,6 +95,22 @@ public class JMXOpInvocation {
 	}
 	
 	/**
+	 * Returns the number of args we're still waiting for
+	 * @return the number of pending args
+	 */
+	public int getPendingArgCount() {
+		return args.length - deserCount;
+	}
+	
+	/**
+	 * Returns the type of the arg expected to come up next
+	 * @return the next args type
+	 */
+	public Class<?> getNextArgType() {
+		return opCode.signature()[deserCount];
+	}
+	
+	/**
 	 * Appends a newly deserialized argument object
 	 * @param arg a deserialized argument object
 	 */

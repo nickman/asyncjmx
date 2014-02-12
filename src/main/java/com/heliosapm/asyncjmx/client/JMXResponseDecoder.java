@@ -31,6 +31,7 @@ import org.jboss.netty.channel.ChannelHandlerContext;
 
 import com.heliosapm.asyncjmx.shared.JMXOpCode;
 import com.heliosapm.asyncjmx.shared.JMXResponseType;
+import com.heliosapm.asyncjmx.shared.serialization.AttributeListSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.KryoReplayingDecoder;
 
 /**
@@ -105,9 +106,17 @@ public class JMXResponseDecoder extends KryoReplayingDecoder<JMXResponseDecodeSt
 				checkpoint(JMXResponseDecodeStep.RESPONSE);
 			//$FALL-THROUGH$
 			case RESPONSE:
-				log.info("Decoding Response");
-				response = kryoRead(channel, buffer, responseSize);
+				log.info("Decoding Response for [%s]", opCode);
+				if(opCode.hasSerializer()) {
+					response = kryoRead(channel, buffer, opCode.getSerializer(), opCode.returnType, responseSize);
+				} else if(opCode==JMXOpCode.GETATTRIBUTES) {
+					response = kryoRead(channel, buffer, new AttributeListSerializer(), opCode.returnType, responseSize);
+				} else {
+					response = kryoRead(channel, buffer, responseSize);
+				}
 				log.info("Returning new JMXOpResponse");
+				//try { buffer.discardReadBytes(); } catch (Exception x) { /* No Op */ }
+				checkpoint(JMXResponseDecodeStep.TYPECODE);
 				return new JMXOpResponse(opCode, requestId, response);
 			case CACHEOP:
 				break;

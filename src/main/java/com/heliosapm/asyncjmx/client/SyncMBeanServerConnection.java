@@ -54,6 +54,8 @@ import javax.management.RuntimeOperationsException;
 
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelEvent;
+import org.jboss.netty.channel.ChannelFuture;
+import org.jboss.netty.channel.ChannelFutureListener;
 import org.jboss.netty.channel.ChannelHandlerContext;
 import org.jboss.netty.channel.ChannelUpstreamHandler;
 import org.jboss.netty.channel.UpstreamMessageEvent;
@@ -118,14 +120,20 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 	 * @return the response to the request if sync, or null if async
 	 */
 	@SuppressWarnings("unchecked")
-	protected <T> T writeRequest(Class<T> returnType, JMXOpCode opCode, Object...args) {
+	protected <T> T writeRequest(Class<T> returnType, final JMXOpCode opCode, Object...args) {
+		log.info("\n\t****\n\tCalling [%s]\n\t****", opCode.name());
 		if(returnType==null) returnType = (Class<T>) VoidResult.class;
 		int rId = serial.incrementAndGet();
 		currentRid.set(rId);
 		for(int i = 0; i < args.length; i++) {
 			if(args[i]==null) args[i] = NullResult.Instance;
 		}
-		channel.write(new Object[] {opCode.opCode, rId, args});
+		channel.write(new Object[] {opCode.opCode, rId, args}).addListener(new ChannelFutureListener() {
+			@Override
+			public void operationComplete(ChannelFuture future) throws Exception {
+				log.info("Write for op [%s] complete", opCode.name());
+			}
+		});
 		Object retValue = null;
 		try {
 			retValue = timeoutQueue.poll(timeout, TimeUnit.MILLISECONDS);

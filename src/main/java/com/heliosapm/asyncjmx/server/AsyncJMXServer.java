@@ -24,9 +24,14 @@
  */
 package com.heliosapm.asyncjmx.server;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.logging.LogManager;
 import java.util.logging.Logger;
 
 import org.jboss.netty.bootstrap.ServerBootstrap;
@@ -43,6 +48,10 @@ import org.jboss.netty.channel.group.DefaultChannelGroup;
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
 import org.jboss.netty.logging.InternalLoggerFactory;
 import org.jboss.netty.logging.JdkLoggerFactory;
+
+import com.heliosapm.asyncjmx.client.AsyncJMXClient;
+import com.heliosapm.asyncjmx.shared.KryoFactory;
+import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 
 /**
  * <p>Title: AsyncJMXServer</p>
@@ -78,6 +87,18 @@ public class AsyncJMXServer implements ChannelUpstreamHandler {
 	protected final Logger log = Logger.getLogger(getClass().getName());
 	
 	static {
+		InputStream is = null;
+		try {
+			is = AsyncJMXClient.class.getClassLoader().getResourceAsStream("server-logging.properties");
+			LogManager.getLogManager().readConfiguration(is);
+			String tsFormat = LogManager.getLogManager().getProperty(JMXLogger.TS_FORMAT_KEY);
+			JMXLogger.setTimestampFormat(tsFormat!=null ? tsFormat : JMXLogger.DEFAULT_DATE_FORMAT);
+		} catch (Exception ex) {
+			System.err.println("Failed to load server logging configuration:" + ex);
+		} finally {
+			if(is!=null) try { is.close(); } catch (Exception x) { /* No Op */ } 
+		}
+		
 		InternalLoggerFactory.setDefaultFactory(new JdkLoggerFactory());
 	}
 	
@@ -97,7 +118,46 @@ public class AsyncJMXServer implements ChannelUpstreamHandler {
 	}
 	
 	public static void main(String[] args) {
-		new AsyncJMXServer();
+		final AsyncJMXServer server = new AsyncJMXServer();
+		Thread t = new Thread() {
+			public void run() {
+				BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+				while(true) {
+					try {
+						String line = br.readLine();
+						try {
+							if("list".equals(line)) {
+								System.out.println("------- Channels -------");
+								for(Channel ch: server.connections) {
+									System.out.println("\t" + ch.getId());
+								}
+								System.out.println("------------------------");
+							} else {
+								String[] pair = line.split("\\s+");
+								int chId = Integer.parseInt(pair[0]);
+								Channel ch = server.connections.find(chId);
+								System.out.println("Selected Channel:" + ch + "  Arg:" + pair[1]);
+								if("dump".equals(pair[1])) {
+									int regid = KryoFactory.getInstance().getKryo(ch).getNextRegistrationId();
+									for(int i = regid; i > 0; i--) {
+										try { System.out.println(KryoFactory.getInstance().getKryo(ch).getRegistration(i)); } catch (Exception x) {}
+									}
+									continue;
+								}
+								int classId = Integer.parseInt(pair[1]);
+								System.out.println(KryoFactory.getInstance().getKryo(ch).getRegistration(classId).getType().getName());
+							}
+							
+							
+						} catch (Exception x) {}
+					} catch (Exception ex) {
+						ex.printStackTrace(System.err);
+					}
+				}
+			}
+		};
+		t.setDaemon(true);
+		t.start();
 	}
 	
 	/**

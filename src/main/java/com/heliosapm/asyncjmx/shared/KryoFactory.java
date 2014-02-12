@@ -26,6 +26,7 @@ package com.heliosapm.asyncjmx.shared;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -56,11 +57,14 @@ import org.jboss.netty.buffer.ChannelBufferOutputStream;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelLocal;
+import org.objenesis.strategy.StdInstantiatorStrategy;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.esotericsoftware.kryo.serializers.CollectionSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.AttributeListSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.AttributeSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.NonSerializable;
 import com.heliosapm.asyncjmx.shared.serialization.NullResult;
@@ -202,13 +206,16 @@ public class KryoFactory {
 	public Kryo newKryo() {
 		Kryo kryo = new Kryo();
 		kryo.setAsmEnabled(true);
+		kryo.setReferences(false);
+		kryo.setInstantiatorStrategy(new StdInstantiatorStrategy());
+		for(Class<?> clazz: REG_CLASSES) {
+			kryo.register(clazz);
+		}
+		
 		for(Map.Entry<Class<?>, Serializer<?>> entry: REG_CLASS_SERIALIZERS.entrySet()) {
 			kryo.register(entry.getKey(), entry.getValue());
 		}
 
-		for(Class<?> clazz: REG_CLASSES) {
-			kryo.register(clazz);
-		}
 		
 		for(Map.Entry<Integer, Class<?>> entry: registeredClasses.entrySet()) {
 			Serializer<?> ser = registeredSerializers.get(entry.getValue());
@@ -218,7 +225,12 @@ public class KryoFactory {
 				kryo.register(entry.getValue(), entry.getKey());
 			}
 		}		
+		kryo.addDefaultSerializer(HashSet.class, CollectionSerializer.class);
 		return kryo;
+	}
+	
+	public Class<?> getClassForId(int id) {
+		return newKryo().getRegistration(id).getType();
 	}
 	
 	/**
@@ -253,7 +265,9 @@ public class KryoFactory {
 
 	/** Don't change this order unless you know what you're doing */
 	private static final Serializer<?>[] REG_SERIALIZERS = {
-		new ObjectNameSerializer(), new ObjectInstanceSerializer(), new AttributeSerializer()
+		new ObjectNameSerializer(), new ObjectInstanceSerializer(), new AttributeSerializer()  
+		//, new AttributeListSerializer()
+		//, new HashSetSerializer(),
 	};
 	
 	static {
@@ -274,10 +288,13 @@ public class KryoFactory {
 		NullResult.class, VoidResult.class, NonSerializable.class, IntrospectionException.class, 
 		NotCompliantMBeanException.class, Set.class, ReflectionException.class, 
 		IOException.class, ListenerNotFoundException.class, MBeanException.class, 
-		ObjectName.class, String[].class, Object[].class, InstanceNotFoundException.class, 
+		Object[].class, InstanceNotFoundException.class, 
 		AttributeList.class, MBeanInfo.class, MBeanRegistrationException.class, QueryExp.class, 
-		ObjectInstance.class, Attribute.class, InstanceAlreadyExistsException.class, InvalidAttributeValueException.class, 
-		NotificationListener.class, AttributeNotFoundException.class, String.class, NotificationFilter.class		
+		InstanceAlreadyExistsException.class, InvalidAttributeValueException.class, 
+		NotificationListener.class, AttributeNotFoundException.class, NotificationFilter.class, HashSet.class, 
+		ObjectName.class, ObjectInstance.class, Attribute.class
+		
+		// ObjectName.class, ObjectInstance.class, Attribute.class
 	};
 	
 	//ObjectInstance createMBean(String className, ObjectName name) throws ReflectionException, InstanceAlreadyExistsException, MBeanRegistrationException, MBeanException, NotCompliantMBeanException, IOException {

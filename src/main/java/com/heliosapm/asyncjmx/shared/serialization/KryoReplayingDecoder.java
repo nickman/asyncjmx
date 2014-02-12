@@ -24,22 +24,27 @@
  */
 package com.heliosapm.asyncjmx.shared.serialization;
 
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBufferInputStream;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.handler.codec.replay.ReplayingDecoder;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.Registration;
+import com.esotericsoftware.kryo.Serializer;
+import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.UnsafeInput;
+import com.heliosapm.asyncjmx.server.JMXOpInvocation;
 import com.heliosapm.asyncjmx.shared.KryoFactory;
 import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 import com.heliosapm.asyncjmx.unsafe.UnsafeAdapter;
 
 /**
  * <p>Title: KryoReplayingDecoder</p>
- * <p>Description: </p> 
+ * <p>Description: Extension of  {@link ReplayingDecoder} to fine-tune kryo object deserializaton.</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>com.heliosapm.asyncjmx.shared.serialization.KryoReplayingDecoder</code></p>
@@ -70,7 +75,6 @@ public abstract class KryoReplayingDecoder<T extends Enum<T>> extends ReplayingD
 	 */
 	public KryoReplayingDecoder() {
 		super();
-		// TODO Auto-generated constructor stub
 	}
 
 
@@ -81,7 +85,6 @@ public abstract class KryoReplayingDecoder<T extends Enum<T>> extends ReplayingD
 	 */
 	public KryoReplayingDecoder(boolean unfold) {
 		super(unfold);
-		// TODO Auto-generated constructor stub
 	}
 
 
@@ -93,7 +96,6 @@ public abstract class KryoReplayingDecoder<T extends Enum<T>> extends ReplayingD
 	 */
 	public KryoReplayingDecoder(T initialState, boolean unfold) {
 		super(initialState, unfold);
-		// TODO Auto-generated constructor stub
 	}
 
 
@@ -104,10 +106,7 @@ public abstract class KryoReplayingDecoder<T extends Enum<T>> extends ReplayingD
 	 */
 	public KryoReplayingDecoder(T initialState) {
 		super(initialState);
-		// TODO Auto-generated constructor stub
 	}
-
-
 
 	/**
 	 * Reads a kryo deserialized object from the passed channel buffer in the scope of this replaying decoder
@@ -121,24 +120,107 @@ public abstract class KryoReplayingDecoder<T extends Enum<T>> extends ReplayingD
 		ChannelBufferInputStream cbis = null;
 		try {
 			buffer.markReaderIndex();
-			log.info("Readable Bytes:%s", super.actualReadableBytes());
-			ChannelBuffer cb = buffer.readBytes(super.actualReadableBytes());
-			if(cb.readableBytes()<responseSize) {
-				log.info("Not enough bytes. Replaying....");
+			//log.info("Readable Bytes:%s", super.actualReadableBytes());
+			
+			if(super.actualReadableBytes()<responseSize) {
+				log.info("Need [%s] bytes but only [%s] available. Replaying....", responseSize, super.actualReadableBytes());
 				throw REPLAY_ERROR;
 			}
+			ChannelBuffer cb = buffer.readBytes(super.actualReadableBytes());
 			cbis = new ChannelBufferInputStream(cb);
-			input = new UnsafeInput(cbis);
+			input = new UnsafeInput(cbis);			
 			log.info("Kryo decoding...");
-			return KryoFactory.getInstance().getKryo(channel).readClassAndObject(input);
+			input.mark(1024);
+			Registration reg = KryoFactory.getInstance().getKryo(channel).readClass(input);
+			log.info("================Reg: %s", reg==null ? "<null>" : reg.toString());
+			Object obj = KryoFactory.getInstance().getKryo(channel).readObject(input, reg.getType());
+			log.info("Kryo Decoded [%s]", obj.getClass().getName());
+			return obj;
 		} catch (Exception ex) {
-			log.warn("Kryo decode failed: [%s]", ex.toString());
+			log.warn("Kryo decode failed: [%s]", ex.toString(), ex);
 			buffer.resetReaderIndex();
 			throw REPLAY_ERROR;
 		} finally {
 			if(input!=null) try { input.close(); } catch (Exception x) { /* No Op */ }
 			if(cbis!=null) try { cbis.close(); } catch (Exception x) { /* No Op */ }
 		}
+	}
+
+	/**
+	 * Reads a kryo deserialized object from the passed channel buffer in the scope of this replaying decoder
+	 * @param channel The current channel
+	 * @param buffer The replaying decoder buffer
+	 * @param serializer The kryo serializer designated by the JMXOpCode
+	 * @param type The expected response type
+	 * @param responseSize The minimum response size required to kryo-deserialize
+	 * @return the read object
+	 */
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	protected Object kryoRead(Channel channel, ChannelBuffer buffer, Serializer<?> serializer, Class type, int responseSize) {
+		UnsafeInput input = null;
+		ChannelBufferInputStream cbis = null;
+		try {
+			buffer.markReaderIndex();
+			ChannelBuffer cb = null;
+			if(responseSize > 0) {
+				if(super.actualReadableBytes()<responseSize) {
+					log.info("Need [%s] bytes but only [%s] available. Replaying....", responseSize, super.actualReadableBytes());
+					throw REPLAY_ERROR;
+				}				
+			}
+			cb = buffer.readBytes(super.actualReadableBytes());
+			cbis = new ChannelBufferInputStream(cb);
+			input = new UnsafeInput(cbis);
+			if(type==null) {
+				type = serializer.getClass().getDeclaredMethod("read", Kryo.class, Input.class, Class.class).getReturnType();
+			}
+			Object obj = serializer.read(KryoFactory.getInstance().getKryo(channel), input, type);
+			log.info("Kryo Decoded [%s]", obj.getClass().getName());
+			return obj;
+		} catch (Throwable ex) {
+			log.warn("Kryo decode failed: [%s]", ex.toString(), ex);
+			buffer.resetReaderIndex();
+			throw REPLAY_ERROR;
+		} finally {
+			if(input!=null) try { input.close(); } catch (Exception x) { /* No Op */ }
+			if(cbis!=null) try { cbis.close(); } catch (Exception x) { /* No Op */ }
+		}		
+	}
+	
+	/**
+	 * Kryo reads one or more objects we don't know anything about
+	 * @param channel The channel we're reading from
+	 * @param buffer The current buffer
+
+	 */
+	protected void kryoRead(Channel channel, ChannelBuffer buffer, JMXOpInvocation inv) {
+		int TOREAD = inv.getPendingArgCount();
+		if(TOREAD<1) return;
+		UnsafeInput input = null;
+		ChannelBufferInputStream cbis = null;
+		try {
+			buffer.markReaderIndex();
+			int readableBytes = super.actualReadableBytes();
+			log.info("Need to read [%s] args with [%s] available bytes", TOREAD, readableBytes);
+			ChannelBuffer cb = buffer.readBytes(readableBytes);	
+			cbis = new ChannelBufferInputStream(cb);
+			input = new UnsafeInput(cbis);			
+			for(int i = 0; i < TOREAD; i++) {
+				Registration reg = KryoFactory.getInstance().getKryo(channel).readClass(input);
+				log.info("================Reg: %s", reg==null ? "<null>" : reg.toString());				
+				Object obj = KryoFactory.getInstance().getKryo(channel).readObject(input, reg.getType());
+				buffer.markReaderIndex();
+				log.info("Kryo Decoded [%s]", obj.getClass().getName());
+				inv.appendArg(obj);
+			}			
+		} catch (Exception ex) {
+			log.warn("Kryo decode failed: [%s]", ex.toString(), ex);
+			buffer.resetReaderIndex();
+			throw REPLAY_ERROR;
+		} finally {
+			if(input!=null) try { input.close(); } catch (Exception x) { /* No Op */ }
+			if(cbis!=null) try { cbis.close(); } catch (Exception x) { /* No Op */ }
+		}				
 	}
 
 }

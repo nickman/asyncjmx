@@ -26,10 +26,8 @@ package com.heliosapm.asyncjmx.server;
 
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
-import java.net.SocketAddress;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.Logger;
 
 import javax.management.Attribute;
 import javax.management.AttributeList;
@@ -41,8 +39,6 @@ import javax.management.NotificationListener;
 import javax.management.ObjectName;
 import javax.management.QueryExp;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelHandler;
 import org.jboss.netty.channel.ChannelHandlerContext;
@@ -53,8 +49,8 @@ import org.jboss.netty.channel.MessageEvent;
 import org.jboss.netty.channel.SimpleChannelHandler;
 
 import com.heliosapm.asyncjmx.server.JMXOpInvocation.DynamicTypedIterator;
-import com.heliosapm.asyncjmx.shared.JMXOpCode;
 import com.heliosapm.asyncjmx.shared.JMXResponseType;
+import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 import com.heliosapm.asyncjmx.shared.serialization.VoidResult;
 
 /**
@@ -71,7 +67,7 @@ public class JMXMBeanServerInvocationHandler extends SimpleChannelHandler {
 	/** The singleton instance ctor lock*/
 	private static final Object lock = new Object();
 	/** Instance logger */
-	private final Logger log = Logger.getLogger(getClass().getName());
+	private final JMXLogger log = JMXLogger.getLogger(getClass());
 	/** A map of the known MBeanServerConnections keyed by either the server's default domain or by the JMXServiceURL */
 	protected final Map<String, MBeanServerConnection> knownMBeanServers = new ConcurrentHashMap<String, MBeanServerConnection>();
 	
@@ -123,10 +119,10 @@ public class JMXMBeanServerInvocationHandler extends SimpleChannelHandler {
 					}
 				}				
 			} else {
-				log.warning("MBeanServer with default domain or id [" + id + "] already registered");
+				log.warn("MBeanServer with default domain or id [%s] already registered", id);
 			}
 		} else {
-			log.warning("MBeanServer [" + mbeanServer + "] had null or empty default domain or id");
+			log.warn("MBeanServer [%s] had null or empty default domain or id", mbeanServer);
 		}		
 	}
 
@@ -142,7 +138,7 @@ public class JMXMBeanServerInvocationHandler extends SimpleChannelHandler {
 			final Channel channel = e.getChannel();
 			JMXOpInvocation op = (JMXOpInvocation)msg;
 			Object response = invoke(op);
-			log.info("[" + op.opCode + "] request result:" + response);
+			log.info("[%s] request result: type:[%s], value:[%s]", op.opCode, response.getClass().getName(), response);
 			//sendResponseHeader(ctx, e.getRemoteAddress(), op.opCode, op.requestId);
 			writeRequested(ctx, new DownstreamMessageEvent(channel, Channels.future(channel), new Object[]{JMXResponseType.JMX_RESPONSE.opCode, op.opCode, op.requestId, response}, e.getRemoteAddress()));
 		} else {

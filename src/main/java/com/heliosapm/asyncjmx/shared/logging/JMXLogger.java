@@ -26,6 +26,7 @@ package com.heliosapm.asyncjmx.shared.logging;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.text.SimpleDateFormat;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
@@ -45,9 +46,37 @@ public class JMXLogger {
 	
 	/** The platform end-of-line sequence */
 	public static final String EOL = System.getProperty("line.separator", "\n");
-	
+	/** The default date format for log formatters */
+	public static final String DEFAULT_DATE_FORMAT = "yyyy-MMM-dd:HH:mm:ss '('SS')'";	
+	/** The logging properties key for the timstamp format */
+	public static final String TS_FORMAT_KEY = "java.util.logging.asyncjmx.dateformat";
+	/** The default date format for log formatters */
+	static String DATE_FORMAT = DEFAULT_DATE_FORMAT;
 	/** A map of created JMXLoggers keyed by the logger name */
 	private static final Map<String, JMXLogger> jmxLoggers = new ConcurrentHashMap<String, JMXLogger>();
+	
+	/**
+	 * Update the timestamp format used by the logging formaters
+	 * @param format The new format as defined in {@link SimpleDateFormat}.
+	 */
+	@SuppressWarnings("unused")
+	public static synchronized void setTimestampFormat(String format) {
+		if(format==null || format.trim().isEmpty()) throw new IllegalArgumentException("Null timestamp format");
+		String _format = format.trim();
+		try {
+			new SimpleDateFormat(_format);
+			DATE_FORMAT = format;
+		} catch (Exception ex) {
+			throw new IllegalArgumentException("Invalid timestamp format [" + format + "]");
+		}
+	}
+	
+	/**
+	 * Resets the logging timestamp formatter to the default defined in {@link #DEFAULT_DATE_FORMAT}.
+	 */
+	public static synchronized void ressetTimestampFormat() {
+		DATE_FORMAT = DEFAULT_DATE_FORMAT;
+	}
 	
 	/**
 	 * Returns a JMXLogger for the passed name

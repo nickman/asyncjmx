@@ -38,6 +38,8 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.io.UnsafeOutput;
 import com.heliosapm.asyncjmx.shared.KryoFactory;
+import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
+import com.heliosapm.asyncjmx.shared.serialization.NullResult;
 
 /**
  * <p>Title: JMXOpEncoder</p>
@@ -50,6 +52,8 @@ import com.heliosapm.asyncjmx.shared.KryoFactory;
 public class JMXOpEncoder extends OneToOneEncoder {
 	/** The buffer factory for sending op invocations */
 	protected ChannelBufferFactory bufferFactory = new HeapChannelBufferFactory();
+	/** Instance logger */
+	protected final JMXLogger log = JMXLogger.getLogger(getClass());
 	
 	/**
 	 * Estimates the size of the payload
@@ -77,8 +81,8 @@ public class JMXOpEncoder extends OneToOneEncoder {
 			header.writeByte(opCode);  // 1  byte for op code
 			header.writeInt((Integer)payload[1]); // 4 bytes for request id
 			final int sizeOffset = header.writerIndex();
-			header.writeInt(0);	// 4 byte for args indicator
 			if(args.length==0) {
+				log.info("Sending Zero Arg Encoded Op");
 				return header;
 			}
 			Output kout = null;
@@ -88,10 +92,18 @@ public class JMXOpEncoder extends OneToOneEncoder {
 				out = new ChannelBufferOutputStream(body);			
 				Kryo kryo = KryoFactory.getInstance().getKryo(channel);			
 				kout = new UnsafeOutput(out);
-				kryo.writeClassAndObject(kout, args);
+				for(Object o: args) {
+					if(o==null) kryo.writeClassAndObject(kout, NullResult.Instance);
+					else {
+						kryo.writeClassAndObject(kout, o);
+						log.info("================Reg: %s", kryo.getRegistration(o.getClass()));
+					}
+				}
+				//kryo.writeClassAndObject(kout, args);
 				kout.flush();
 				out.flush();
-				header.setInt(sizeOffset, body.writerIndex());
+//				header.setInt(sizeOffset, body.writerIndex());
+				log.info("Sending Encoded Op with [%s] args and [%s] bytes", args.length, body.writerIndex());
 				return ChannelBuffers.wrappedBuffer(header, body);
 			} finally {
 				if(kout!=null) try { kout.close(); } catch (Exception x) { /* No Op */ }

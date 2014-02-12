@@ -65,28 +65,40 @@ public class JMXOpDecoder extends  KryoReplayingDecoder<JMXOpDecodeStep> {
 	
 	@Override
 	protected Object decode(ChannelHandlerContext ctx, Channel channel, ChannelBuffer buffer, JMXOpDecodeStep state) throws Exception {
+//		header.writeByte(opCode);  // 1  byte for op code
+//		header.writeInt((Integer)payload[1]); // 4 bytes for request id
+//		final int sizeOffset = header.writerIndex();
+//		header.writeInt(0);	// 4 byte for args indicator
 		
 		switch(state) {
 			case OPCODE:				
 				opInvocation = new JMXOpInvocation(buffer.readByte());
+				log.info("Read JMXOp [%s]", opInvocation.opCode);
 				checkpoint(JMXOpDecodeStep.REQUESTID);
 			//$FALL-THROUGH$
 			case REQUESTID:
 				opInvocation.setRequestId(buffer.readInt());
-				checkpoint(JMXOpDecodeStep.ARGBYTESIZE);
-			//$FALL-THROUGH$
-			case ARGBYTESIZE:
-				responseSize = buffer.readInt();
-				if(responseSize==0) {
+				log.info("Read RequestID [%s]", opInvocation.getRequestId());
+				if(opInvocation.hasMoreArgs()) {
+					checkpoint(JMXOpDecodeStep.ARGS);
+				} else {
+					checkpoint(JMXOpDecodeStep.OPCODE);
 					return opInvocation;
 				}
-				checkpoint(JMXOpDecodeStep.ARGS);
 			//$FALL-THROUGH$
+//			case ARGBYTESIZE:
+//				responseSize = buffer.readInt();
+//				log.info("Read Arg Size [%s]", responseSize);
+//				if(responseSize==0) {
+//					checkpoint(JMXOpDecodeStep.OPCODE);
+//					return opInvocation;
+//				}
+//				checkpoint(JMXOpDecodeStep.ARGS);
+//			//$FALL-THROUGH$
 			case ARGS:
-				Object[] response = (Object[])kryoRead(channel, buffer, responseSize);
-				for(int i = 0; i < response.length; i++) {
-					opInvocation.appendArg(response[i]);
-				}				
+				checkpoint(JMXOpDecodeStep.ARGS);
+				kryoRead(channel, buffer, opInvocation);
+				checkpoint(JMXOpDecodeStep.OPCODE);
 				return opInvocation;
 			default:
 				throw new Error("Shouldn't reach here.");

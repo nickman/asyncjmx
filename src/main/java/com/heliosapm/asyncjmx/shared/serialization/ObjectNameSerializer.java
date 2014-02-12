@@ -75,14 +75,13 @@ public class ObjectNameSerializer extends Serializer<ObjectName> {
 			} catch (Exception ex) {
 				throw new RuntimeException("Failed to create ObjectName from string [" + os + "]", ex);
 			}
-		} else {
-			int key = input.readInt();
-			ObjectName on = objectNameDecodes.get(key);
-			if(on==null) {
-				throw new RuntimeException("Failed to decode ObjectName from int [" + key + "]");
-			}
-			return on;
 		}
+		int key = input.readInt();
+		ObjectName on = objectNameDecodes.get(key);
+		if(on==null) {
+			throw new RuntimeException("Failed to decode ObjectName from int [" + key + "]");
+		}
+		return on;
 	}
 
 	public static void main(String[] args) {

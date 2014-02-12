@@ -33,8 +33,15 @@ import javax.management.AttributeList;
 import javax.management.MBeanServerConnection;
 import javax.management.NotificationFilter;
 import javax.management.NotificationListener;
+import javax.management.ObjectInstance;
 import javax.management.ObjectName;
 import javax.management.QueryExp;
+
+import com.esotericsoftware.kryo.Serializer;
+import com.esotericsoftware.kryo.serializers.CollectionSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.AttributeListSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.ObjectInstanceSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.ObjectNameSerializer;
 
 /**
  * <p>Title: JMXOpCode</p>
@@ -46,9 +53,9 @@ import javax.management.QueryExp;
 
 public enum JMXOpCode {
 	/** JMX Op enum member for {@link MBeanServerConnection#queryMBeans(javax.management.ObjectName,javax.management.QueryExp)} */
-	QUERYMBEANS((byte)0, java.util.Set.class, ObjectName.class, QueryExp.class),
+	QUERYMBEANS((byte)0, java.util.HashSet.class, new CollectionSerializer(ObjectInstance.class, new ObjectInstanceSerializer(), false), ObjectName.class, QueryExp.class),
 	/** JMX Op enum member for {@link MBeanServerConnection#queryNames(javax.management.ObjectName,javax.management.QueryExp)} */
-	QUERYNAMES((byte)1, java.util.Set.class, ObjectName.class, QueryExp.class),
+	QUERYNAMES((byte)1, java.util.HashSet.class, new CollectionSerializer(ObjectName.class, new ObjectNameSerializer(), false), ObjectName.class, QueryExp.class),
 	/** JMX Op enum member for {@link MBeanServerConnection#getMBeanCount()} */
 	GETMBEANCOUNT((byte)2, java.lang.Integer.class),
 	/** JMX Op enum member for {@link MBeanServerConnection#getDefaultDomain()} */
@@ -86,7 +93,8 @@ public enum JMXOpCode {
 	/** JMX Op enum member for {@link MBeanServerConnection#isRegistered(javax.management.ObjectName)} */
 	ISREGISTERED((byte)19, boolean.class, ObjectName.class),
 	/** JMX Op enum member for {@link MBeanServerConnection#getAttributes(javax.management.ObjectName,java.lang.String[])} */
-	GETATTRIBUTES((byte)20, javax.management.AttributeList.class, ObjectName.class, String[].class),
+//	GETATTRIBUTES((byte)20, javax.management.AttributeList.class, new CollectionSerializer(Attribute.class, new AttributeSerializer(), false), ObjectName.class, String[].class),
+	GETATTRIBUTES((byte)20, javax.management.AttributeList.class, new AttributeListSerializer(), ObjectName.class, String[].class),
 	/** JMX Op enum member for {@link MBeanServerConnection#getAttribute(javax.management.ObjectName,java.lang.String)} */
 	GETATTRIBUTE((byte)21, java.lang.Object.class, ObjectName.class, String.class),
 	/** JMX Op enum member for {@link MBeanServerConnection#setAttribute(javax.management.ObjectName,javax.management.Attribute)} */
@@ -108,11 +116,17 @@ public enum JMXOpCode {
 		CODE2OP = Collections.unmodifiableMap(tmp);
 	}
 	
-	JMXOpCode(byte opCode, Class<?> returnType, Class<?>...params) {
+	JMXOpCode(byte opCode, Class<?> returnType, Serializer<?> serializer, Class<?>...params) {
 		this.opCode = opCode;
 		this.params = params;
 		this.returnType = returnType;
+		this.serializer = serializer;
 	}
+	
+	JMXOpCode(byte opCode, Class<?> returnType, Class<?>...params) {
+		this(opCode, returnType, null, params);
+	}
+	
 	
 	/** The JMX Op opCode byte */
 	public final byte opCode;
@@ -120,6 +134,16 @@ public enum JMXOpCode {
 	public final Class<?> returnType;
 	/** The JMX Op signature */
 	private final Class<?>[] params;
+	/** The serializer for the response type, if applicable */
+	private final Serializer<?> serializer;
+	
+	public boolean hasSerializer() {
+		return serializer!=null;
+	}
+	
+	public Serializer<?> getSerializer() {
+		return serializer;
+	}
 	
 	/**
 	 * Decodes the passed byte JMXOpCode code
