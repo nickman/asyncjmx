@@ -37,6 +37,8 @@ public enum JMXOpDecodeStep {
 	OPCODE,
 	/** The one int request id */
 	REQUESTID,
+	/** The size of the arg playload in bytes */
+	ARGBYTESIZE,
 	/** The op args */
 	ARGS;
 

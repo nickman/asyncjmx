@@ -28,6 +28,8 @@ import org.jboss.netty.channel.ChannelPipeline;
 import org.jboss.netty.channel.ChannelPipelineFactory;
 import org.jboss.netty.channel.ChannelUpstreamHandler;
 import org.jboss.netty.channel.Channels;
+import org.jboss.netty.handler.logging.LoggingHandler;
+import org.jboss.netty.logging.InternalLogLevel;
 
 /**
  * <p>Title: JMXClientPipelineFactory</p>
@@ -70,7 +72,7 @@ public class JMXClientPipelineFactory implements ChannelPipelineFactory {
 	@Override
 	public ChannelPipeline getPipeline() throws Exception {
 		ChannelPipeline pipeline = Channels.pipeline();
-		//pipeline.addLast("log", new LoggingHandler(InternalLogLevel.INFO, true));
+		pipeline.addLast("log", new LoggingHandler(InternalLogLevel.INFO, true));
 		pipeline.addLast(NEWCONN_HANDLER, connectionHandler);
 		pipeline.addLast(JMXOP_ENCODER, opEncoder);
 		pipeline.addLast(JMXOP_DECODER, new JMXResponseDecoder());

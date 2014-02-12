@@ -24,33 +24,24 @@
  */
 package com.heliosapm.asyncjmx.client;
 
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBufferInputStream;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.channel.UpstreamMessageEvent;
-import org.jboss.netty.handler.codec.replay.ReplayingDecoder;
 
-import com.esotericsoftware.kryo.io.UnsafeInput;
 import com.heliosapm.asyncjmx.shared.JMXOpCode;
 import com.heliosapm.asyncjmx.shared.JMXResponseType;
-import com.heliosapm.asyncjmx.shared.KryoFactory;
-import com.heliosapm.asyncjmx.unsafe.UnsafeAdapter;
+import com.heliosapm.asyncjmx.shared.serialization.KryoReplayingDecoder;
 
 /**
  * <p>Title: JMXResponseDecoder</p>
- * <p>Description: </p> 
+ * <p>Description: Netty decoder for responses and callbacks from the JMX server</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>com.heliosapm.asyncjmx.client.JMXResponseDecoder</code></p>
  */
 
-public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> {
-	/** Instance logger */
-	protected final Logger log = Logger.getLogger(getClass().getName());
+public class JMXResponseDecoder extends KryoReplayingDecoder<JMXResponseDecodeStep> {
 	/** The chanel buffer's input stream */
 	protected ChannelBufferInputStream is = null;
 	/** The JMX Response Type */
@@ -59,6 +50,8 @@ public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> 
 	protected JMXOpCode opCode = null;
 	/** The JMX Request original request id if the response type is an Op return */
 	protected int requestId = -1;
+	/** The size of the response in bytes */
+	protected int responseSize = -1;
 	/** The response to an op call, or the notification object for async notifications */
 	protected Object response = null;
 	
@@ -87,8 +80,10 @@ public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> 
 				log.info("ResponseType:" + responseType);
 				switch(responseType) {
 				case CACHE_OP:
+					checkpoint(JMXResponseDecodeStep.CACHEOP);
+					break;
 				case JMX_NOTIFICATION:
-					checkpoint(JMXResponseDecodeStep.RESPONSE);
+					checkpoint(JMXResponseDecodeStep.NOTIFICATION);
 					break;
 				case JMX_RESPONSE:
 					checkpoint(JMXResponseDecodeStep.OPCODE);
@@ -102,32 +97,21 @@ public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> 
 			case REQUESTID:
 				requestId = buffer.readInt();
 				log.info("RequestID:" + requestId);
+				checkpoint(JMXResponseDecodeStep.SIZE);
+			//$FALL-THROUGH$
+			case SIZE:
+				responseSize = buffer.readInt();
+				log.info("Response Size:" + responseSize);
 				checkpoint(JMXResponseDecodeStep.RESPONSE);
 			//$FALL-THROUGH$
 			case RESPONSE:
-				log.info("Waiting on full Response");
-				try {
-					buffer.markReaderIndex();
-					ChannelBuffer cb = buffer.readBytes(super.actualReadableBytes());
-					log.info("Read [" + cb.readableBytes() + "] bytes");
-					UnsafeInput input = new UnsafeInput(new ChannelBufferInputStream(cb));
-//					UnsafeInput input = new UnsafeInput(bytes);
-					response = KryoFactory.getInstance().getKryo(channel).readClassAndObject(input);
-					log.info("Response:" + response);
-					ctx.sendUpstream(new UpstreamMessageEvent(channel, new JMXOpResponse(opCode, requestId, response), channel.getLocalAddress()));
-					return null;
-					
-				} catch (Error err) {
-					if("ReplayError".equals(err.getClass())) {
-						log.info("REPLAYERROR");
-						UnsafeAdapter.throwException(err);
-					}											
-				} catch (Exception ex) {
-					buffer.resetReaderIndex();
-					log.log(Level.SEVERE, "Failed to read response payload", ex);
-					break;
-				}
+				log.info("Decoding Response");
+				response = kryoRead(channel, buffer, responseSize);
+				log.info("Returning new JMXOpResponse");
+				return new JMXOpResponse(opCode, requestId, response);
 			case CACHEOP:
+				break;
+			case NOTIFICATION:
 				break;
 		
 		}

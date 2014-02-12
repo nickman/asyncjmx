@@ -143,28 +143,29 @@ public class JMXMBeanServerInvocationHandler extends SimpleChannelHandler {
 			JMXOpInvocation op = (JMXOpInvocation)msg;
 			Object response = invoke(op);
 			log.info("[" + op.opCode + "] request result:" + response);
-			sendResponseHeader(ctx, e.getRemoteAddress(), op.opCode, op.requestId);
-			writeRequested(ctx, new DownstreamMessageEvent(channel, Channels.future(channel), response, e.getRemoteAddress()));
+			//sendResponseHeader(ctx, e.getRemoteAddress(), op.opCode, op.requestId);
+			writeRequested(ctx, new DownstreamMessageEvent(channel, Channels.future(channel), new Object[]{JMXResponseType.JMX_RESPONSE.opCode, op.opCode, op.requestId, response}, e.getRemoteAddress()));
 		} else {
 			super.messageReceived(ctx, e);
 		}
 	}
 	
-	/**
-	 * Sends the header of the response back to the caller
-	 * @param ctx The channel handler context
-	 * @param remoteAddress The remote address we're sending back to
-	 * @param opCode The JMX op code of the original incoming request
-	 * @param requestId The request id of the original incoming request
-	 */
-	protected void sendResponseHeader(ChannelHandlerContext ctx, SocketAddress remoteAddress, JMXOpCode opCode, int requestId) {
-		ChannelBuffer buf = ChannelBuffers.buffer(6);
-		buf.writeByte(JMXResponseType.JMX_RESPONSE.opCode);
-		buf.writeByte(opCode.opCode);
-		buf.writeInt(requestId);
-		Channel channel = ctx.getChannel();
-		ctx.sendDownstream(new DownstreamMessageEvent(channel, Channels.future(channel), buf, remoteAddress));
-	}
+//	/**
+//	 * Sends the header of the response back to the caller
+//	 * @param ctx The channel handler context
+//	 * @param remoteAddress The remote address we're sending back to
+//	 * @param opCode The JMX op code of the original incoming request
+//	 * @param requestId The request id of the original incoming request
+//	 */
+//	protected void sendResponseHeader(ChannelHandlerContext ctx, SocketAddress remoteAddress, JMXOpCode opCode, int requestId) {
+//		{JMXResponseType.JMX_RESPONSE.opCode, op.opCode, op.requestId, response}
+//		ChannelBuffer buf = ChannelBuffers.buffer(6);
+//		buf.writeByte(JMXResponseType.JMX_RESPONSE.opCode);
+//		buf.writeByte(opCode.opCode);
+//		buf.writeInt(requestId);
+//		Channel channel = ctx.getChannel();
+//		ctx.sendDownstream(new DownstreamMessageEvent(channel, Channels.future(channel), buf, remoteAddress));
+//	}
 	
 	
 	/**

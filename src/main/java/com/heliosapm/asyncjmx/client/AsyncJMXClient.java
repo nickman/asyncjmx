@@ -25,11 +25,13 @@
 package com.heliosapm.asyncjmx.client;
 
 import java.net.InetSocketAddress;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.logging.Logger;
 
 import javax.management.MBeanServerConnection;
+import javax.management.ObjectName;
 
 import org.jboss.netty.bootstrap.ClientBootstrap;
 import org.jboss.netty.channel.Channel;
@@ -92,8 +94,15 @@ public class AsyncJMXClient implements ChannelUpstreamHandler {
 		try {
 			MBeanServerConnection conn = client.connectMBeanServerConnection("localhost", 9061);
 			System.out.println("DefaultDomain:" + conn.getDefaultDomain());
+			Set<ObjectName> objectNames = conn.queryNames(null, null);
+			System.out.println("ObjectNames:" + objectNames.size());
+			
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);
+		} finally {
+			client.connections.close().awaitUninterruptibly();
+			client.channelFactory.releaseExternalResources();
+			client.channelFactory.shutdown();
 		}
 	}
 	

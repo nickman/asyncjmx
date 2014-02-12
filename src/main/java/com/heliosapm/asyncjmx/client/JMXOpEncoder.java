@@ -36,6 +36,8 @@ import org.jboss.netty.handler.codec.oneone.OneToOneEncoder;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
+import com.esotericsoftware.kryo.io.UnsafeOutput;
+import com.heliosapm.asyncjmx.shared.KryoFactory;
 
 /**
  * <p>Title: JMXOpEncoder</p>
@@ -71,36 +73,30 @@ public class JMXOpEncoder extends OneToOneEncoder {
 			Object[]  payload = (Object[])msg;     // {opCode, rId, args}
 			Object[]  args = (Object[])payload[2];
 			byte opCode = (Byte)payload[0];
-			ChannelBuffer buf = ChannelBuffers.dynamicBuffer(estimateSize(opCode, payload), bufferFactory);
-			buf.writeByte(opCode);
-			buf.writeInt((Integer)payload[1]);			
-			if(args.length > 0) {
-				ChannelBufferOutputStream out = new ChannelBufferOutputStream(buf);
-				Kryo kryo = null;
-				Output kout = null;		
-				try {
-					for(int i = 0; i < args.length; i++) {
-						if(args[i]==null) {
-							out.writeByte(0);
-						} else {
-							out.writeByte(1);
-							if(kryo==null) {
-								kryo = new Kryo();
-								kout = new Output(out);
-							}
-							kryo.writeObject(kout, args[1]);
-						}
-					}
-				} finally {
-					try { out.flush(); } catch (Exception x) {/* No Op */}
-					try { out.close(); } catch (Exception x) {/* No Op */}
-					if(kout!=null) {
-						try { kout.flush(); } catch (Exception x) {/* No Op */}
-						try { kout.close(); } catch (Exception x) {/* No Op */}
-					}
-				}
+			ChannelBuffer header = ChannelBuffers.buffer(9);			
+			header.writeByte(opCode);  // 1  byte for op code
+			header.writeInt((Integer)payload[1]); // 4 bytes for request id
+			final int sizeOffset = header.writerIndex();
+			header.writeInt(0);	// 4 byte for args indicator
+			if(args.length==0) {
+				return header;
 			}
-			return buf;
+			Output kout = null;
+			ChannelBufferOutputStream out = null;
+			try {
+				ChannelBuffer body = ChannelBuffers.dynamicBuffer(estimateSize(opCode, payload), bufferFactory);
+				out = new ChannelBufferOutputStream(body);			
+				Kryo kryo = KryoFactory.getInstance().getKryo(channel);			
+				kout = new UnsafeOutput(out);
+				kryo.writeClassAndObject(kout, args);
+				kout.flush();
+				out.flush();
+				header.setInt(sizeOffset, body.writerIndex());
+				return ChannelBuffers.wrappedBuffer(header, body);
+			} finally {
+				if(kout!=null) try { kout.close(); } catch (Exception x) { /* No Op */ }
+				if(out!=null) try { out.close(); } catch (Exception x) { /* No Op */ }
+			}
 		}
 		return null;
 	}

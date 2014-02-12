@@ -28,11 +28,12 @@ import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBufferInputStream;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.handler.codec.replay.ReplayingDecoder;
 
 import com.esotericsoftware.kryo.io.UnsafeInput;
+import com.heliosapm.asyncjmx.client.JMXOpResponse;
 import com.heliosapm.asyncjmx.server.JMXOpInvocation;
 import com.heliosapm.asyncjmx.shared.KryoFactory;
+import com.heliosapm.asyncjmx.shared.serialization.KryoReplayingDecoder;
 
 /**
  * <p>Title: JMXOpDecoder</p>
@@ -42,7 +43,7 @@ import com.heliosapm.asyncjmx.shared.KryoFactory;
  * <p><code>com.heliosapm.asyncjmx.server.serialization.JMXOpDecoder</code></p>
  */
 
-public class JMXOpDecoder extends  ReplayingDecoder<JMXOpDecodeStep> {
+public class JMXOpDecoder extends  KryoReplayingDecoder<JMXOpDecodeStep> {
 
 	/**
 	 * Creates a new JMXOpDecoder
@@ -59,6 +60,9 @@ public class JMXOpDecoder extends  ReplayingDecoder<JMXOpDecodeStep> {
 	/** The kryo input associated to the channel buffer input stream */
 	protected UnsafeInput input = null;
 	
+	/** The caller sent response size */
+	protected int responseSize = -1;
+	
 	@Override
 	protected Object decode(ChannelHandlerContext ctx, Channel channel, ChannelBuffer buffer, JMXOpDecodeStep state) throws Exception {
 		
@@ -69,23 +73,20 @@ public class JMXOpDecoder extends  ReplayingDecoder<JMXOpDecodeStep> {
 			//$FALL-THROUGH$
 			case REQUESTID:
 				opInvocation.setRequestId(buffer.readInt());
+				checkpoint(JMXOpDecodeStep.ARGBYTESIZE);
+			//$FALL-THROUGH$
+			case ARGBYTESIZE:
+				responseSize = buffer.readInt();
+				if(responseSize==0) {
+					return opInvocation;
+				}
 				checkpoint(JMXOpDecodeStep.ARGS);
 			//$FALL-THROUGH$
 			case ARGS:
-				while(opInvocation.hasMoreArgs()) {
-					if(buffer.readByte()==0) {
-						opInvocation.appendArg(null);
-					} else {
-						if(is==null) {
-							is = new ChannelBufferInputStream(buffer);
-							input = new UnsafeInput(is);
-						}
-						opInvocation.appendArg(KryoFactory.getInstance().getKryo(channel).readClassAndObject(input));						
-					}
-				}	
-				if(is!=null) {
-					try { is.close(); } catch (Exception x) { /* No Op */ }
-				}
+				Object[] response = (Object[])kryoRead(channel, buffer, responseSize);
+				for(int i = 0; i < response.length; i++) {
+					opInvocation.appendArg(response[i]);
+				}				
 				return opInvocation;
 			default:
 				throw new Error("Shouldn't reach here.");

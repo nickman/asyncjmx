@@ -33,12 +33,11 @@ import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.buffer.HeapChannelBufferFactory;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.channel.Channels;
-import org.jboss.netty.channel.DownstreamMessageEvent;
 import org.jboss.netty.handler.codec.oneone.OneToOneEncoder;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.UnsafeOutput;
+import com.heliosapm.asyncjmx.shared.JMXOpCode;
 import com.heliosapm.asyncjmx.shared.KryoFactory;
 
 /**
@@ -73,24 +72,35 @@ public class JMXResponseEncoder extends OneToOneEncoder {
 	 */
 	@Override
 	protected Object encode(ChannelHandlerContext ctx, Channel channel, Object msg) throws Exception {
-		if(msg instanceof ChannelBuffer) return msg;		
+		if(!(msg instanceof Object[])) return msg;		
 		log.info("Serializing response");
+//		{JMXResponseType.JMX_RESPONSE.opCode, op.opCode, op.requestId, response}
+		Object[] resp = (Object[])msg;
+		 
+		ChannelBuffer header = ChannelBuffers.buffer(10);
+		
+		header.writeByte((Byte)resp[0]);  // response type	1
+		header.writeByte(((JMXOpCode)resp[1]).opCode);  // jmx op 1
+		header.writeInt((Integer)resp[2]); // request if 4
+		final int sizeOffset = header.writerIndex();
+		header.writeInt(-1);				// the size of the payload placeholder 4
+		ChannelBuffer body = ChannelBuffers.dynamicBuffer(estimateSize(resp[3]), bufferFactory);
 		Kryo kryo = KryoFactory.getInstance().getKryo(channel);
-		ChannelBuffer buf = ChannelBuffers.dynamicBuffer(estimateSize(msg), bufferFactory);
-		ChannelBufferOutputStream cos = new ChannelBufferOutputStream(buf);
+		ChannelBufferOutputStream cos = new ChannelBufferOutputStream(body);
 		UnsafeOutput out = new UnsafeOutput(cos);
 		try {
-			log.info("Writing out [" + msg + "]");
-			kryo.writeClassAndObject(out, msg);
+			log.info("Writing out [" + resp[3] + "]");
+			kryo.writeClassAndObject(out, resp[3]);
 			out.flush();
 			cos.flush();
 		} catch (Exception ex) {
 			log.warning("Write failed. Writing NonSer");
-			buf = KryoFactory.getInstance().getNonSerializable(kryo, msg);
+			body = KryoFactory.getInstance().getNonSerializable(kryo, msg);
 		}
-		log.info("Write out complete");
-		ctx.sendDownstream(new DownstreamMessageEvent(channel, Channels.future(channel), buf, channel.getRemoteAddress()));
-		return null;
+		header.setInt(sizeOffset, body.writerIndex());
+		log.info("Write out complete");		
+		//ctx.sendDownstream(new DownstreamMessageEvent(channel, Channels.future(channel), buf, channel.getRemoteAddress()));
+		return ChannelBuffers.wrappedBuffer(header, body);
 	}
 
 }

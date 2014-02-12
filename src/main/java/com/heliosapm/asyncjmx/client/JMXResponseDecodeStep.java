@@ -39,8 +39,12 @@ public enum JMXResponseDecodeStep {
 	OPCODE,
 	/** The one int request id */
 	REQUESTID,
+	/** The size of the response object in bytes */
+	SIZE,
 	/** The op response */
 	RESPONSE,
 	/** The cache op advisory from the server */
-	CACHEOP;
+	CACHEOP,
+	/** A notification from the server */
+	NOTIFICATION;
 }
