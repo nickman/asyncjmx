@@ -72,7 +72,7 @@ public class JMXClientPipelineFactory implements ChannelPipelineFactory {
 	@Override
 	public ChannelPipeline getPipeline() throws Exception {
 		ChannelPipeline pipeline = Channels.pipeline();
-		pipeline.addLast("log", new LoggingHandler(InternalLogLevel.INFO, true));
+		//pipeline.addLast("log", new LoggingHandler(InternalLogLevel.INFO, true));
 		pipeline.addLast(NEWCONN_HANDLER, connectionHandler);
 		pipeline.addLast(JMXOP_ENCODER, opEncoder);
 		pipeline.addLast(JMXOP_DECODER, new JMXResponseDecoder());

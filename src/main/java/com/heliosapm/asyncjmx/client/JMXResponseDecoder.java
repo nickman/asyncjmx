@@ -93,7 +93,7 @@ public class JMXResponseDecoder extends KryoReplayingDecoder<JMXResponseDecodeSt
 			case OPCODE:
 				opCode = JMXOpCode.decode(buffer.readByte());
 				log.info("JMXOpCode:" + opCode);
-				checkpoint(JMXResponseDecodeStep.REQUESTID);
+				checkpoint(JMXResponseDecodeStep.REQUESTID);				
 			//$FALL-THROUGH$
 			case REQUESTID:
 				requestId = buffer.readInt();
@@ -106,12 +106,12 @@ public class JMXResponseDecoder extends KryoReplayingDecoder<JMXResponseDecodeSt
 				checkpoint(JMXResponseDecodeStep.RESPONSE);
 			//$FALL-THROUGH$
 			case RESPONSE:
-				log.info("Decoding Response for [%s]", opCode);
+				
 				if(opCode.hasSerializer()) {
+					log.info("Decoding Response for [%s] with Ser:[%s]", opCode, opCode.getSerializer().getClass().getSimpleName());
 					response = kryoRead(channel, buffer, opCode.getSerializer(), opCode.returnType, responseSize);
-				} else if(opCode==JMXOpCode.GETATTRIBUTES) {
-					response = kryoRead(channel, buffer, new AttributeListSerializer(), opCode.returnType, responseSize);
 				} else {
+					log.info("Decoding Response for [%s] with No Ser", opCode);
 					response = kryoRead(channel, buffer, responseSize);
 				}
 				log.info("Returning new JMXOpResponse");

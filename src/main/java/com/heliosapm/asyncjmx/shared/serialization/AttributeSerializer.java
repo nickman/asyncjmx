@@ -31,6 +31,7 @@ import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.heliosapm.asyncjmx.shared.KryoFactory;
+import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 
 /**
  * <p>Title: AttributeSerializer</p>
@@ -41,6 +42,8 @@ import com.heliosapm.asyncjmx.shared.KryoFactory;
  */
 
 public class AttributeSerializer extends Serializer<Attribute> {
+	/** Instance logger */
+	protected static final JMXLogger log = JMXLogger.getLogger(AttributeSerializer.class);
 
 	/**
 	 * {@inheritDoc}
@@ -49,15 +52,9 @@ public class AttributeSerializer extends Serializer<Attribute> {
 	@Override
 	public void write(Kryo kryo, Output output, Attribute object) {
 		output.writeString(object.getName());
-		final int pos = output.position();
-		try {
-			output.writeByte(1);
-			kryo.writeObject(output, object.getValue());			
-		} catch (Exception ex) {
-			output.setPosition(pos);
-			output.writeByte(0);
-			kryo.writeObject(output, KryoFactory.getInstance().getNonSerializable(kryo, object.getValue()));
-		}
+		Object value = object.getValue();
+		kryo.writeClassAndObject(output, value);
+		log.info("Wrote Attribute [%s][%s]", object.getName(), value);
 	}
 
 	/**
@@ -65,12 +62,11 @@ public class AttributeSerializer extends Serializer<Attribute> {
 	 * @see com.esotericsoftware.kryo.Serializer#read(com.esotericsoftware.kryo.Kryo, com.esotericsoftware.kryo.io.Input, java.lang.Class)
 	 */
 	@Override
-	public Attribute read(Kryo kryo, Input input, Class<Attribute> type) {
+	public Attribute read(Kryo kryo, Input input, Class<Attribute> type) {		
 		String name = input.readString();
-		if(input.readByte()==1) {
-			return new Attribute(name, kryo.readObject(input, Attribute.class));
-		}
-		return new Attribute(name, kryo.readObject(input, NonSerializable.class));
+		log.info("Reading Attribute [%s]", name);
+		Object value = kryo.readClassAndObject(input);
+		return new Attribute(name, value);
 	}
 
 }

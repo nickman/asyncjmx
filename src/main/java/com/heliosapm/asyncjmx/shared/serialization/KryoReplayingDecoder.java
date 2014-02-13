@@ -131,9 +131,11 @@ public abstract class KryoReplayingDecoder<T extends Enum<T>> extends ReplayingD
 			input = new UnsafeInput(cbis);			
 			log.info("Kryo decoding...");
 			input.mark(1024);
-			Registration reg = KryoFactory.getInstance().getKryo(channel).readClass(input);
-			log.info("================Reg: %s", reg==null ? "<null>" : reg.toString());
-			Object obj = KryoFactory.getInstance().getKryo(channel).readObject(input, reg.getType());
+			Object obj = KryoFactory.getInstance().getKryo(channel).readClassAndObject(input);			
+//			Registration reg = KryoFactory.getInstance().getKryo(channel).readClass(input);
+//			log.info("================Reg: %s", reg==null ? "<null>" : reg.toString());
+//			Object obj = KryoFactory.getInstance().getKryo(channel).readObject(input, reg.getType());
+			
 			log.info("Kryo Decoded [%s]", obj.getClass().getName());
 			return obj;
 		} catch (Exception ex) {
@@ -174,6 +176,7 @@ public abstract class KryoReplayingDecoder<T extends Enum<T>> extends ReplayingD
 			if(type==null) {
 				type = serializer.getClass().getDeclaredMethod("read", Kryo.class, Input.class, Class.class).getReturnType();
 			}
+			log.info("Decoding type [%s] using serializer [%s]", type.getSimpleName(), serializer.getClass().getSimpleName());
 			Object obj = serializer.read(KryoFactory.getInstance().getKryo(channel), input, type);
 			log.info("Kryo Decoded [%s]", obj.getClass().getName());
 			return obj;

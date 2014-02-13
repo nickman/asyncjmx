@@ -24,6 +24,8 @@
  */
 package com.heliosapm.asyncjmx.client;
 
+import java.util.Arrays;
+
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBufferFactory;
 import org.jboss.netty.buffer.ChannelBufferOutputStream;
@@ -103,7 +105,7 @@ public class JMXOpEncoder extends OneToOneEncoder {
 				kout.flush();
 				out.flush();
 //				header.setInt(sizeOffset, body.writerIndex());
-				log.info("Sending Encoded Op with [%s] args and [%s] bytes", args.length, body.writerIndex());
+				log.info("Sending Encoded Op with [%s] args and [%s] bytes.  Args: %s", args.length, body.writerIndex(), Arrays.toString(args));
 				return ChannelBuffers.wrappedBuffer(header, body);
 			} finally {
 				if(kout!=null) try { kout.close(); } catch (Exception x) { /* No Op */ }

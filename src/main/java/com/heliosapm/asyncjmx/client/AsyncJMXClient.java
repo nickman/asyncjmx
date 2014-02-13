@@ -115,6 +115,9 @@ public class AsyncJMXClient implements ChannelUpstreamHandler {
 		try {
 			MBeanServerConnection conn = client.connectMBeanServerConnection("localhost", 9061);
 			System.out.println("DefaultDomain:" + conn.getDefaultDomain());
+			MBeanInfo minfo = conn.getMBeanInfo(new ObjectName("java.lang:name=PS MarkSweep,type=GarbageCollector"));
+			System.out.println("Minfo:\n" + minfo);
+			
 			
 			Set<ObjectName> objectNames = conn.queryNames(null, null);
 			if(objectNames!=null) {
@@ -135,7 +138,7 @@ public class AsyncJMXClient implements ChannelUpstreamHandler {
 				System.out.println("QueryMBeans Failed");
 			}
 			for(ObjectName on: conn.queryNames(null, null)) {
-				MBeanInfo minfo = conn.getMBeanInfo(on);
+				minfo = conn.getMBeanInfo(on);
 				Set<String> attrNames = new HashSet<String>();
 				for(MBeanAttributeInfo ma: minfo.getAttributes()) {
 					attrNames.add(ma.getName());

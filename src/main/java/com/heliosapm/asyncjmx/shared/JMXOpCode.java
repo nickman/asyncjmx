@@ -39,6 +39,7 @@ import javax.management.QueryExp;
 
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.serializers.CollectionSerializer;
+import com.esotericsoftware.kryo.serializers.JavaSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.AttributeListSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.ObjectInstanceSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.ObjectNameSerializer;
@@ -75,7 +76,7 @@ public enum JMXOpCode {
 	/** JMX Op enum member for {@link MBeanServerConnection#removeNotificationListener(javax.management.ObjectName,javax.management.NotificationListener)} */
 	REMOVENOTIFICATIONLISTENER_ON((byte)10, void.class, ObjectName.class, NotificationListener.class),
 	/** JMX Op enum member for {@link MBeanServerConnection#getMBeanInfo(javax.management.ObjectName)} */
-	GETMBEANINFO((byte)11, javax.management.MBeanInfo.class, ObjectName.class),
+	GETMBEANINFO((byte)11, javax.management.MBeanInfo.class, new JavaSerializer(), ObjectName.class),
 	/** JMX Op enum member for {@link MBeanServerConnection#createMBean(java.lang.String,javax.management.ObjectName,javax.management.ObjectName,java.lang.Object[],java.lang.String[])} */
 	CREATEMBEAN_SOOOS((byte)12, javax.management.ObjectInstance.class, String.class, ObjectName.class, ObjectName.class, Object[].class, String[].class),
 	/** JMX Op enum member for {@link MBeanServerConnection#createMBean(java.lang.String,javax.management.ObjectName,java.lang.Object[],java.lang.String[])} */

@@ -25,6 +25,14 @@
 package com.heliosapm.asyncjmx.shared;
 
 import java.io.IOException;
+import java.lang.management.LockInfo;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ManagementPermission;
+import java.lang.management.MemoryNotificationInfo;
+import java.lang.management.MemoryType;
+import java.lang.management.MemoryUsage;
+import java.lang.management.MonitorInfo;
+import java.lang.management.ThreadInfo;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -34,23 +42,98 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.management.Attribute;
+import javax.management.AttributeChangeNotification;
+import javax.management.AttributeChangeNotificationFilter;
 import javax.management.AttributeList;
 import javax.management.AttributeNotFoundException;
+import javax.management.AttributeValueExp;
+import javax.management.BadAttributeValueExpException;
+import javax.management.BadBinaryOpValueExpException;
+import javax.management.BadStringOperationException;
+import javax.management.DescriptorKey;
+import javax.management.ImmutableDescriptor;
 import javax.management.InstanceAlreadyExistsException;
 import javax.management.InstanceNotFoundException;
 import javax.management.IntrospectionException;
+import javax.management.InvalidApplicationException;
 import javax.management.InvalidAttributeValueException;
+import javax.management.JMException;
+import javax.management.JMRuntimeException;
 import javax.management.ListenerNotFoundException;
+import javax.management.MBeanAttributeInfo;
+import javax.management.MBeanConstructorInfo;
 import javax.management.MBeanException;
+import javax.management.MBeanFeatureInfo;
 import javax.management.MBeanInfo;
+import javax.management.MBeanNotificationInfo;
+import javax.management.MBeanOperationInfo;
+import javax.management.MBeanParameterInfo;
+import javax.management.MBeanPermission;
 import javax.management.MBeanRegistrationException;
+import javax.management.MBeanServerBuilder;
+import javax.management.MBeanServerDelegate;
+import javax.management.MBeanServerFactory;
+import javax.management.MBeanServerInvocationHandler;
+import javax.management.MBeanServerNotification;
+import javax.management.MBeanServerPermission;
+import javax.management.MBeanTrustPermission;
+import javax.management.MXBean;
+import javax.management.MalformedObjectNameException;
 import javax.management.NotCompliantMBeanException;
+import javax.management.Notification;
+import javax.management.NotificationBroadcasterSupport;
 import javax.management.NotificationFilter;
+import javax.management.NotificationFilterSupport;
 import javax.management.NotificationListener;
 import javax.management.ObjectInstance;
 import javax.management.ObjectName;
+import javax.management.OperationsException;
+import javax.management.Query;
+import javax.management.QueryEval;
 import javax.management.QueryExp;
 import javax.management.ReflectionException;
+import javax.management.RuntimeErrorException;
+import javax.management.RuntimeMBeanException;
+import javax.management.RuntimeOperationsException;
+import javax.management.ServiceNotFoundException;
+import javax.management.StandardEmitterMBean;
+import javax.management.StandardMBean;
+import javax.management.StringValueExp;
+import javax.management.loading.DefaultLoaderRepository;
+import javax.management.loading.MLet;
+import javax.management.loading.MLetContent;
+import javax.management.loading.PrivateMLet;
+import javax.management.modelmbean.DescriptorSupport;
+import javax.management.modelmbean.ModelMBeanAttributeInfo;
+import javax.management.modelmbean.ModelMBeanConstructorInfo;
+import javax.management.modelmbean.ModelMBeanInfoSupport;
+import javax.management.modelmbean.ModelMBeanNotificationInfo;
+import javax.management.modelmbean.ModelMBeanOperationInfo;
+import javax.management.modelmbean.RequiredModelMBean;
+import javax.management.openmbean.ArrayType;
+import javax.management.openmbean.CompositeDataInvocationHandler;
+import javax.management.openmbean.CompositeDataSupport;
+import javax.management.openmbean.CompositeType;
+import javax.management.openmbean.OpenMBeanAttributeInfoSupport;
+import javax.management.openmbean.OpenMBeanConstructorInfoSupport;
+import javax.management.openmbean.OpenMBeanInfoSupport;
+import javax.management.openmbean.OpenMBeanOperationInfoSupport;
+import javax.management.openmbean.OpenMBeanParameterInfoSupport;
+import javax.management.openmbean.OpenType;
+import javax.management.openmbean.SimpleType;
+import javax.management.openmbean.TabularDataSupport;
+import javax.management.openmbean.TabularType;
+import javax.management.remote.JMXConnectionNotification;
+import javax.management.remote.JMXConnectorFactory;
+import javax.management.remote.JMXConnectorServer;
+import javax.management.remote.JMXConnectorServerFactory;
+import javax.management.remote.JMXPrincipal;
+import javax.management.remote.JMXServiceURL;
+import javax.management.remote.NotificationResult;
+import javax.management.remote.SubjectDelegationPermission;
+import javax.management.remote.TargetedNotification;
+import javax.management.timer.Timer;
+import javax.management.timer.TimerNotification;
 
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBufferOutputStream;
@@ -64,12 +147,14 @@ import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.CollectionSerializer;
-import com.heliosapm.asyncjmx.shared.serialization.AttributeListSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.AttributeSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.NonSerializable;
 import com.heliosapm.asyncjmx.shared.serialization.NullResult;
 import com.heliosapm.asyncjmx.shared.serialization.ObjectInstanceSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.ObjectNameSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.OpenTypeSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.TabularDataSupportSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.UnmodifiableRandomAccessListSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.VoidResult;
 
 /**
@@ -226,6 +311,7 @@ public class KryoFactory {
 			}
 		}		
 		kryo.addDefaultSerializer(HashSet.class, CollectionSerializer.class);
+		kryo.register(runtimeForName("java.util.Collections$UnmodifiableRandomAccessList"), new UnmodifiableRandomAccessListSerializer());
 		return kryo;
 	}
 	
@@ -265,7 +351,7 @@ public class KryoFactory {
 
 	/** Don't change this order unless you know what you're doing */
 	private static final Serializer<?>[] REG_SERIALIZERS = {
-		new ObjectNameSerializer(), new ObjectInstanceSerializer(), new AttributeSerializer()  
+		new ObjectNameSerializer(), new ObjectInstanceSerializer(), new AttributeSerializer(), new TabularDataSupportSerializer(), new OpenTypeSerializer(),
 		//, new AttributeListSerializer()
 		//, new HashSetSerializer(),
 	};
@@ -292,10 +378,45 @@ public class KryoFactory {
 		AttributeList.class, MBeanInfo.class, MBeanRegistrationException.class, QueryExp.class, 
 		InstanceAlreadyExistsException.class, InvalidAttributeValueException.class, 
 		NotificationListener.class, AttributeNotFoundException.class, NotificationFilter.class, HashSet.class, 
-		ObjectName.class, ObjectInstance.class, Attribute.class
+		ObjectName.class, ObjectInstance.class, Attribute.class, runtimeForName("java.util.Collections$UnmodifiableRandomAccessList"),
+		ArrayType.class, CompositeDataInvocationHandler.class, CompositeDataSupport.class, CompositeType.class,
+		OpenMBeanAttributeInfoSupport.class, OpenMBeanConstructorInfoSupport.class, OpenMBeanInfoSupport.class,
+		OpenMBeanOperationInfoSupport.class, OpenMBeanParameterInfoSupport.class, OpenType.class, SimpleType.class,
+		TabularDataSupport.class, TabularType.class, DefaultLoaderRepository.class, MLet.class, MLetContent.class, PrivateMLet.class,
+		DescriptorSupport.class, ModelMBeanAttributeInfo.class, ModelMBeanConstructorInfo.class, ModelMBeanInfoSupport.class, 
+		ModelMBeanNotificationInfo.class, ModelMBeanOperationInfo.class, RequiredModelMBean.class, JMXConnectionNotification.class, 
+		JMXConnectorFactory.class, JMXConnectorServer.class, JMXConnectorServerFactory.class, JMXPrincipal.class, JMXServiceURL.class, 
+		NotificationResult.class, SubjectDelegationPermission.class, TargetedNotification.class, Timer.class, TimerNotification.class,
+		LockInfo.class, ManagementFactory.class, ManagementPermission.class, MemoryNotificationInfo.class, MemoryUsage.class, MonitorInfo.class, ThreadInfo.class, 
+		MemoryType.class, Attribute.class, AttributeChangeNotification.class, AttributeChangeNotificationFilter.class, 
+		AttributeList.class, AttributeValueExp.class, javax.management.DefaultLoaderRepository.class, ImmutableDescriptor.class, 
+		MBeanAttributeInfo.class, MBeanConstructorInfo.class, MBeanFeatureInfo.class, MBeanInfo.class, MBeanNotificationInfo.class, 
+		MBeanOperationInfo.class, MBeanParameterInfo.class, MBeanPermission.class, MBeanServerBuilder.class, MBeanServerDelegate.class, 
+		MBeanServerFactory.class, MBeanServerInvocationHandler.class, MBeanServerNotification.class, MBeanServerPermission.class, 
+		MBeanTrustPermission.class, Notification.class, NotificationBroadcasterSupport.class, NotificationFilterSupport.class, 
+		ObjectInstance.class, ObjectName.class, Query.class, QueryEval.class, StandardEmitterMBean.class, StandardMBean.class, 
+		StringValueExp.class, AttributeNotFoundException.class, BadAttributeValueExpException.class, BadBinaryOpValueExpException.class, 
+		BadStringOperationException.class, InstanceAlreadyExistsException.class, InstanceNotFoundException.class, IntrospectionException.class, 
+		InvalidApplicationException.class, InvalidAttributeValueException.class, JMException.class, JMRuntimeException.class, 
+		ListenerNotFoundException.class, MalformedObjectNameException.class, MBeanException.class, MBeanRegistrationException.class, 
+		NotCompliantMBeanException.class, OperationsException.class, ReflectionException.class, RuntimeErrorException.class, 
+		RuntimeMBeanException.class, RuntimeOperationsException.class, ServiceNotFoundException.class, DescriptorKey.class, MXBean.class, 
+
+
+
+
+
 		
 		// ObjectName.class, ObjectInstance.class, Attribute.class
 	};
+	
+	public static Class<?> runtimeForName(String className) {
+		try {
+			return Class.forName(className);
+		} catch (Exception ex) {
+			throw new RuntimeException("Failed to load class [" + className + "]", ex);
+		}
+	}
 	
 	//ObjectInstance createMBean(String className, ObjectName name) throws ReflectionException, InstanceAlreadyExistsException, MBeanRegistrationException, MBeanException, NotCompliantMBeanException, IOException {
 	

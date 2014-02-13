@@ -44,7 +44,9 @@ import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 public class AttributeListSerializer extends Serializer<AttributeList> {
 	/** Instance logger */
 	protected static final JMXLogger log = JMXLogger.getLogger(AttributeListSerializer.class);
-
+	/** The attribute seralizer */
+	protected final AttributeSerializer attrSerializer = new AttributeSerializer();
+	
 	/**
 	 * {@inheritDoc}
 	 * @see com.esotericsoftware.kryo.Serializer#write(com.esotericsoftware.kryo.Kryo, com.esotericsoftware.kryo.io.Output, java.lang.Object)
@@ -54,9 +56,8 @@ public class AttributeListSerializer extends Serializer<AttributeList> {
 		output.writeInt(object.size());
 		log.info("AttributeList Size:%s", object.size());
 		for(Attribute attr: object.asList()) {
-			kryo.writeClassAndObject(output, attr);
-		}
-		
+			attrSerializer.write(kryo, output, attr);
+		}		
 	}
 
 	/**
@@ -66,17 +67,21 @@ public class AttributeListSerializer extends Serializer<AttributeList> {
 	@Override
 	public AttributeList read(Kryo kryo, Input input, Class<AttributeList> type) {
 		try {
-			kryo.setReferences(true);			
+//			kryo.setReferences(true);			
 			int size = input.readInt();
 			log.info("AttributeList Size:%s", size);
 			AttributeList attrs = new AttributeList(size);
 			for(int i = 0; i < size; i++) {
-				Attribute attr = (Attribute)kryo.readClassAndObject(input);
+				Attribute attr = attrSerializer.read(kryo, input, Attribute.class);
+				log.info("Read attribute [%s]", attr);
 				attrs.add(attr);
 			}
 			return attrs;
+		} catch (Exception ex) {
+			log.error("Failed to read attr", ex);
+			throw new RuntimeException(ex);
 		} finally {
-			kryo.setReferences(false);
+//			kryo.setReferences(false);
 		}
 	}
 
