@@ -173,11 +173,12 @@ public abstract class KryoReplayingDecoder<T extends Enum<T>> extends ReplayingD
 			cb = buffer.readBytes(super.actualReadableBytes());
 			cbis = new ChannelBufferInputStream(cb);
 			input = new UnsafeInput(cbis);
-			if(type==null) {
-				type = serializer.getClass().getDeclaredMethod("read", Kryo.class, Input.class, Class.class).getReturnType();
-			}
-			log.info("Decoding type [%s] using serializer [%s]", type.getSimpleName(), serializer.getClass().getSimpleName());
-			Object obj = serializer.read(KryoFactory.getInstance().getKryo(channel), input, type);
+//			if(type==null) {
+//				type = serializer.getClass().getDeclaredMethod("read", Kryo.class, Input.class, Class.class).getReturnType();
+//			}
+//			log.info("Decoding type [%s] using serializer [%s]", type.getSimpleName(), serializer.getClass().getSimpleName());
+//			Object obj = serializer.read(KryoFactory.getInstance().getKryo(channel), input, type);
+			Object obj = KryoFactory.getInstance().getKryo(channel).readClassAndObject(input);
 			log.info("Kryo Decoded [%s]", obj.getClass().getName());
 			return obj;
 		} catch (Throwable ex) {

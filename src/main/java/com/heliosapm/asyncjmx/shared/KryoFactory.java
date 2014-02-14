@@ -111,6 +111,7 @@ import javax.management.modelmbean.ModelMBeanNotificationInfo;
 import javax.management.modelmbean.ModelMBeanOperationInfo;
 import javax.management.modelmbean.RequiredModelMBean;
 import javax.management.openmbean.ArrayType;
+import javax.management.openmbean.CompositeData;
 import javax.management.openmbean.CompositeDataInvocationHandler;
 import javax.management.openmbean.CompositeDataSupport;
 import javax.management.openmbean.CompositeType;
@@ -180,8 +181,6 @@ public class KryoFactory {
 	private final AtomicInteger classIndex = new AtomicInteger(100);
 	/** Registered classes */
 	private final Map<Integer, Class<?>> registeredClasses = new ConcurrentSkipListMap<Integer, Class<?>>();
-	/** Serializers associated to specific classes */
-	private final Map<Class<?>, Serializer<?>> registeredSerializers = new ConcurrentHashMap<Class<?>, Serializer<?>>();
 	
 	/** A {@link VoidResult} serialized into a ChannelBuffer */
 	private final ChannelBuffer voidResultBuffer;
@@ -296,32 +295,14 @@ public class KryoFactory {
 	 */
 	public Kryo newKryo() {
 		Kryo kryo = new Kryo();
+		kryo.setDefaultSerializer(AsyncJMXSerializerFactory.getInstance());
 		kryo.setAsmEnabled(true);
 		kryo.setReferences(false);
 		kryo.setInstantiatorStrategy(new StdInstantiatorStrategy());
 		for(Class<?> clazz: REG_CLASSES) {
 			kryo.register(clazz);
 		}
-		
-		for(Map.Entry<Class<?>, Serializer<?>> entry: REG_CLASS_SERIALIZERS.entrySet()) {
-			kryo.register(entry.getKey(), entry.getValue());
-		}
-
-		
-		for(Map.Entry<Integer, Class<?>> entry: registeredClasses.entrySet()) {
-			Serializer<?> ser = registeredSerializers.get(entry.getValue());
-			if(ser!=null) {
-				kryo.register(entry.getValue(), ser, entry.getKey());
-			} else {
-				kryo.register(entry.getValue(), entry.getKey());
-			}
-		}		
-		kryo.addDefaultSerializer(HashSet.class, CollectionSerializer.class);
-		kryo.register(runtimeForName("java.util.Collections$UnmodifiableRandomAccessList"), new UnmodifiableRandomAccessListSerializer());
-		kryo.register(ArrayType.class, new ArrayTypeSerializer());
-		kryo.register(SimpleType.class, new SimpleTypeSerializer());
-		kryo.register(TabularType.class, new TabularTypeSerializer());
-		kryo.register(CompositeType.class, new CompositeTypeSerializer());
+		AsyncJMXSerializerFactory.getInstance().addRegistered(kryo);
 		return kryo;
 	}
 	
@@ -343,9 +324,6 @@ public class KryoFactory {
 				}
 			}
 		}
-		if(ser!=null) {
-			registeredSerializers.put(clazz, ser);
-		}
 	}
 
 	/**
@@ -356,33 +334,6 @@ public class KryoFactory {
 		registerClass(clazz, null);
 	}
 	
-	/** A map to associate the statically registered serializers to the classes they serialize for */
-	private static final Map<Class<?>, Serializer<?>> REG_CLASS_SERIALIZERS = new HashMap<Class<?>, Serializer<?>>();
-
-	/** Don't change this order unless you know what you're doing */
-	private static final Serializer<?>[] REG_SERIALIZERS = {
-		new ObjectNameSerializer(), new ObjectInstanceSerializer(), new AttributeSerializer(), new TabularDataSupportSerializer(), new OpenTypeSerializer(),
-		new MBeanServerNotificationSerializer(), new CompositeDataSupportSerializer()
-		//, new AttributeListSerializer()
-		//, new HashSetSerializer(),
-	};
-	
-	static {
-		for(Serializer<?> ser: REG_SERIALIZERS) {
-			try {
-				//read(Kryo kryo, Input input, Class<ObjectName> type)
-				try {
-					Class<?> clazz = ser.getClass().getDeclaredMethod("read", Kryo.class, Input.class, Class.class).getReturnType();
-					REG_CLASS_SERIALIZERS.put(clazz, ser);
-				} catch (NoSuchMethodException nex) {
-					Class<?> clazz = ser.getClass().getDeclaredMethod("doRead", Kryo.class, Input.class, Class.class).getReturnType();
-					REG_CLASS_SERIALIZERS.put(clazz, ser);					
-				}
-			} catch (Exception ex) {
-				throw new RuntimeException("Failed to resolve serializer [" + ser.getClass().getName() + "]", ex);
-			}
-		}
-	}
 	
 	
 	/** Don't change this order unless you know what you're doing */

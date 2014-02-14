@@ -62,7 +62,7 @@ public abstract class BaseSerializer<T> extends Serializer<T> {
 			
 		} catch (Exception ex) {
 			log.error("Serializer write failed", ex);
-			throw new RuntimeException("Serializer write failed", ex);
+			throw new RuntimeException("Serializer write [" + getClass().getSimpleName() + "] failed", ex);
 		} finally {
 			undent();
 		}
@@ -82,7 +82,7 @@ public abstract class BaseSerializer<T> extends Serializer<T> {
 			return t;
 		} catch (Exception ex) {
 			log.error("Serializer read failed", ex);
-			throw new RuntimeException("Serializer read failed", ex);
+			throw new RuntimeException("Serializer read [" + getClass().getSimpleName() + "] failed", ex);
 		} finally {
 			undent();
 		}

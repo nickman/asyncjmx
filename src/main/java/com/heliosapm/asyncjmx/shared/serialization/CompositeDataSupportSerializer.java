@@ -28,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
+import javax.management.openmbean.CompositeData;
 import javax.management.openmbean.CompositeDataSupport;
 import javax.management.openmbean.CompositeType;
 
@@ -37,16 +38,16 @@ import com.esotericsoftware.kryo.io.Output;
 
 /**
  * <p>Title: CompositeDataSupportSerializer</p>
- * <p>Description: Serializer for {@link CompositeDataSupport} instances</p> 
+ * <p>Description: Serializer for {@link CompositeData} instances</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>com.heliosapm.asyncjmx.shared.serialization.CompositeDataSupportSerializer</code></p>
  */
 
-public class CompositeDataSupportSerializer extends BaseSerializer<CompositeDataSupport> {
+public class CompositeDataSupportSerializer extends BaseSerializer<CompositeData> {
 
 	@Override
-	protected void doWrite(Kryo kryo, Output output, CompositeDataSupport cds) {
+	protected void doWrite(Kryo kryo, Output output, CompositeData cds) {
 		kryo.writeObject(output, cds.getCompositeType());
 		Set<String> keys = cds.getCompositeType().keySet();
 		for(String key: keys) {			
@@ -55,7 +56,7 @@ public class CompositeDataSupportSerializer extends BaseSerializer<CompositeData
 	}
 
 	@Override
-	protected CompositeDataSupport doRead(Kryo kryo, Input input, Class<CompositeDataSupport> type) {
+	protected CompositeDataSupport doRead(Kryo kryo, Input input, Class<CompositeData> type) {
 		CompositeType ct = kryo.readObject(input, CompositeType.class);
 		Set<String> keys = ct.keySet();
 		Map<String, Object> keyValues = new LinkedHashMap<String, Object>(keys.size());
