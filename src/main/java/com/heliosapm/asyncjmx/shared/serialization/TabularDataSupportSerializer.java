@@ -24,16 +24,17 @@
  */
 package com.heliosapm.asyncjmx.shared.serialization;
 
-import java.util.Map;
+import java.util.Arrays;
+import java.util.List;
 
+import javax.management.openmbean.CompositeDataSupport;
+import javax.management.openmbean.CompositeType;
 import javax.management.openmbean.TabularDataSupport;
 import javax.management.openmbean.TabularType;
 
 import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 
 /**
  * <p>Title: TabularDataSupportSerializer</p>
@@ -47,28 +48,44 @@ public class TabularDataSupportSerializer extends BaseSerializer<TabularDataSupp
 
 	@Override
 	protected void doWrite(Kryo kryo, Output output, TabularDataSupport tds) {
-		log.info("Writing TabularDataSupport [%s]", tds.getTabularType().getDescription());
+		final String ind = ind();
+		log.info("%s Writing TabularDataSupport [%s]", ind, tds.getTabularType().getDescription());
 		kryo.writeClassAndObject(output, tds.getTabularType());		
 		int size = tds.size();
-		output.write(size);
-		for(Map.Entry<Object, Object> entry: tds.entrySet()) {
-			kryo.writeClassAndObject(output, entry.getKey());
-			kryo.writeClassAndObject(output, entry.getValue());
-		}		
+		log.info("%s Writing TabularDataSupport Size:[%s]", ind, size);
+		output.writeInt(size);
+		output.flush();
+		for(Object key: tds.keySet()) {
+			String[] keys = ((List<String>)key).toArray(new String[0]);
+			Object value = ((CompositeDataSupport)tds.get(keys)).get("value");
+			kryo.writeClassAndObject(output, keys);
+			kryo.writeClassAndObject(output, value);
+			log.info("Key/Value:[%s]--[%s]", Arrays.toString(keys), value);
+		}
 	}
 
 	@Override
 	protected TabularDataSupport doRead(Kryo kryo, Input input, Class<TabularDataSupport> type) {
+		final String ind = ind();
 		try {
 //			kryo.setReferences(true);			
 			TabularType ttype = (TabularType)kryo.readClassAndObject(input);
 			int size = input.readInt();
+			log.info("%s Read TabularDataSupport Size:[%s]", ind, size);
 			TabularDataSupport tds = new TabularDataSupport(ttype, size, 0.75f);
+			CompositeType ct = ttype.getRowType();
+			String[] ctKeys = ct.keySet().toArray(new String[0]);
 			for(int i = 0; i < size; i++) {
-				Object key = kryo.readClassAndObject(input);
-				log.info("Read Key [%s]", key);
+				String[] key = (String[])kryo.readClassAndObject(input);
+				log.info("Read Key [%s]", Arrays.toString(key));
 				Object value = kryo.readClassAndObject(input);
-				tds.put(key, value);
+				log.info("Read Value [%s]", value);
+				try {
+					CompositeDataSupport cds = new CompositeDataSupport(ttype.getRowType(), ctKeys, new Object[] {key[0], value}); 
+					tds.put(cds);
+				} catch (Exception ex) {
+					log.warn("Failed to process CDS for tabular type: %s", ex.toString());
+				}
 			}
 			return tds;
 		} finally {

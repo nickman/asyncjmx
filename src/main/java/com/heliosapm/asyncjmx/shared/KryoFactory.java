@@ -149,6 +149,7 @@ import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.CollectionSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.ArrayTypeSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.AttributeSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.CompositeDataSupportSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.CompositeTypeSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.MBeanServerNotificationSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.NonSerializable;
@@ -361,7 +362,7 @@ public class KryoFactory {
 	/** Don't change this order unless you know what you're doing */
 	private static final Serializer<?>[] REG_SERIALIZERS = {
 		new ObjectNameSerializer(), new ObjectInstanceSerializer(), new AttributeSerializer(), new TabularDataSupportSerializer(), new OpenTypeSerializer(),
-		new MBeanServerNotificationSerializer(),
+		new MBeanServerNotificationSerializer(), new CompositeDataSupportSerializer()
 		//, new AttributeListSerializer()
 		//, new HashSetSerializer(),
 	};

@@ -173,6 +173,10 @@ public class BaseTest extends Assert {
 			super(bytes);
 		}
 		
+		public int getBytesRead() {
+			return this.position();
+		}
+		
 	}
 	
 	

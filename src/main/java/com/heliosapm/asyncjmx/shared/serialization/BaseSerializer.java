@@ -28,10 +28,15 @@ public abstract class BaseSerializer<T> extends Serializer<T> {
 		}
 	};
 	
-	private static String indent() {
+	protected static String ind() {
+		return indent.get().toString();
+	}
+	
+	protected static String indent() {
 		return indent.get().append("-").toString();
 	}
-	private static String undent() {
+	
+	protected static String undent() {
 		StringBuilder b = indent.get(); 
 		b.deleteCharAt(0);
 		if(b.length()==0) indent.remove();
