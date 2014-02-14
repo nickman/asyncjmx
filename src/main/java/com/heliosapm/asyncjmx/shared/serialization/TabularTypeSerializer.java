@@ -29,7 +29,6 @@ import javax.management.openmbean.OpenDataException;
 import javax.management.openmbean.TabularType;
 
 import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
@@ -41,10 +40,9 @@ import com.esotericsoftware.kryo.io.Output;
  * <p><code>com.heliosapm.asyncjmx.shared.serialization.TabularTypeSerializer</code></p>
  */
 
-public class TabularTypeSerializer extends Serializer<TabularType> {
-
+public class TabularTypeSerializer extends BaseSerializer<TabularType> {
 	@Override
-	public void write(Kryo kryo, Output output, TabularType tType) {
+	protected void doWrite(Kryo kryo, Output output, TabularType tType) {
 		output.writeString(tType.getTypeName());
 		output.writeString(tType.getDescription());
 		int indexCount = tType.getIndexNames().size();
@@ -52,13 +50,11 @@ public class TabularTypeSerializer extends Serializer<TabularType> {
 		for(String s: tType.getIndexNames()) {
 			output.writeString(s);
 		}
-//		kryo.writeObject(output, tType.getIndexNames().toArray(new String[0]));
-		OpenTypeSerializer.ctSerializer.write(kryo, output, tType.getRowType());
-		
+		kryo.writeClassAndObject(output, tType.getRowType());		
 	}
 
 	@Override
-	public TabularType read(Kryo kryo, Input input, Class<TabularType> type) {
+	protected TabularType doRead(Kryo kryo, Input input, Class<TabularType> type) {
 		String typeName = input.readString();
 		String description = input.readString();
 		int indexCount = input.readInt();
@@ -66,7 +62,7 @@ public class TabularTypeSerializer extends Serializer<TabularType> {
 		for(int i = 0; i < indexCount; i++) {
 			indexNames[i] = input.readString();
 		}
-		CompositeType ct = OpenTypeSerializer.ctSerializer.read(kryo, input, CompositeType.class);
+		CompositeType ct = (CompositeType)kryo.readClassAndObject(input);
 		try {
 			return new TabularType(typeName, description, ct, indexNames);
 		} catch (OpenDataException e) {

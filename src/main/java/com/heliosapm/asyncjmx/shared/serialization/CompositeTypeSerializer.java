@@ -28,9 +28,11 @@ import javax.management.openmbean.CompositeType;
 import javax.management.openmbean.OpenType;
 
 import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.Registration;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 
 /**
  * <p>Title: CompositeTypeSerializer</p>
@@ -41,6 +43,8 @@ import com.esotericsoftware.kryo.io.Output;
  */
 
 public class CompositeTypeSerializer extends Serializer<CompositeType> {
+	/** Instance logger */
+	protected final JMXLogger log = JMXLogger.getLogger(getClass());
 	protected static final OpenTypeSerializer otSerialzier = new OpenTypeSerializer();
 	@Override
 	public void write(Kryo kryo, Output output, CompositeType cType) {
@@ -51,7 +55,9 @@ public class CompositeTypeSerializer extends Serializer<CompositeType> {
 		for(String s: cType.keySet()) {
 			output.writeString(s);
 			output.writeString(cType.getDescription(s));
-			otSerialzier.write(kryo, output, cType.getType(s));
+			kryo.writeClassAndObject(output, cType.getType(s));	
+			log.info("Wrote Composite Type Member [%s]/[%s]/[%s]-->[%s]", s, cType.getDescription(s), cType.getType(s), cType.getType(s).getClass().getName());
+			
 		}				
 	}
 
@@ -66,7 +72,7 @@ public class CompositeTypeSerializer extends Serializer<CompositeType> {
 		for(int i = 0; i < size; i++) {
 			itemNames[i] = input.readString();
 			itemDescriptions[i] = input.readString();
-			itemTypes[i] = otSerialzier.read(kryo, input, OpenType.class);
+			itemTypes[i] =  (OpenType)kryo.readClassAndObject(input); //otSerialzier.read(kryo, input, OpenType.class);
 		}
 		try {
 			return new CompositeType(typeName, description, itemNames, itemDescriptions, itemTypes);

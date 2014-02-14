@@ -47,14 +47,14 @@ import com.heliosapm.asyncjmx.shared.KryoFactory;
  * <p><code>com.heliosapm.asyncjmx.shared.serialization.ObjectNameSerializer</code></p>
  */
 
-public class ObjectNameSerializer extends Serializer<ObjectName> {
+public class ObjectNameSerializer extends BaseSerializer<ObjectName> {
 	/** A map of ObjectName encodes keyed by the ObjectName */
 	protected static final Map<ObjectName, Integer> objectNameEncodes = new ConcurrentHashMap<ObjectName, Integer>();
 	/** A map of ObjectName decodes keyed by the int */
 	protected static final Map<Integer, ObjectName> objectNameDecodes = new ConcurrentHashMap<Integer, ObjectName>();
 	
 	@Override
-	public void write(Kryo kryo, Output output, ObjectName object) {
+	protected void doWrite(Kryo kryo, Output output, ObjectName object) {
 		Integer encode = objectNameEncodes.get(object);
 		if(encode==null) {
 			output.writeByte(0);
@@ -66,7 +66,7 @@ public class ObjectNameSerializer extends Serializer<ObjectName> {
 	}
 
 	@Override
-	public ObjectName read(Kryo kryo, Input input, Class<ObjectName> type) {
+	protected ObjectName doRead(Kryo kryo, Input input, Class<ObjectName> type) {
 		byte format = input.readByte();
 		if(format==0) {
 			String os = input.readString();

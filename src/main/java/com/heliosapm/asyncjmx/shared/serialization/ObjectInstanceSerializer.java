@@ -28,7 +28,6 @@ import javax.management.ObjectInstance;
 import javax.management.ObjectName;
 
 import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
@@ -40,24 +39,16 @@ import com.esotericsoftware.kryo.io.Output;
  * <p><code>com.heliosapm.asyncjmx.shared.serialization.ObjectInstanceSerializer</code></p>
  */
 
-public class ObjectInstanceSerializer extends Serializer<ObjectInstance> {
+public class ObjectInstanceSerializer extends BaseSerializer<ObjectInstance> {
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.esotericsoftware.kryo.Serializer#write(com.esotericsoftware.kryo.Kryo, com.esotericsoftware.kryo.io.Output, java.lang.Object)
-	 */
 	@Override
-	public void write(Kryo kryo, Output output, ObjectInstance object) {
+	protected void doWrite(Kryo kryo, Output output, ObjectInstance object) {
 		kryo.writeObject(output, object.getObjectName());
 		output.writeString(object.getClassName());
 	}
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.esotericsoftware.kryo.Serializer#read(com.esotericsoftware.kryo.Kryo, com.esotericsoftware.kryo.io.Input, java.lang.Class)
-	 */
 	@Override
-	public ObjectInstance read(Kryo kryo, Input input, Class<ObjectInstance> type) {
+	protected ObjectInstance doRead(Kryo kryo, Input input, Class<ObjectInstance> type) {
 		ObjectName on = kryo.readObject(input, ObjectName.class);
 		return new ObjectInstance(on, input.readString());
 	}

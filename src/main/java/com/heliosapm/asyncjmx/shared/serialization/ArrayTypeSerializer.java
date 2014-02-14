@@ -25,9 +25,11 @@
 package com.heliosapm.asyncjmx.shared.serialization;
 
 import javax.management.openmbean.ArrayType;
+import javax.management.openmbean.OpenDataException;
+import javax.management.openmbean.OpenType;
+import javax.management.openmbean.SimpleType;
 
 import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
@@ -39,16 +41,43 @@ import com.esotericsoftware.kryo.io.Output;
  * <p><code>com.heliosapm.asyncjmx.shared.serialization.ArrayTypeSerializer</code></p>
  */
 
-public class ArrayTypeSerializer extends Serializer<ArrayType> {
+@SuppressWarnings("rawtypes")
+public class ArrayTypeSerializer extends BaseSerializer<ArrayType> {
 
 	@Override
-	public void write(Kryo kryo, Output output, ArrayType object) {
-		
+	protected void doWrite(Kryo kryo, Output output, ArrayType at) {		
+		if(at.isPrimitiveArray()) {
+			output.writeByte(0);
+			 
+		} else {
+			output.writeByte(1);
+			output.writeInt(at.getDimension());
+		}
+		kryo.writeClassAndObject(output, at.getElementOpenType());		
 	}
 
 	@Override
-	public ArrayType read(Kryo kryo, Input input, Class<ArrayType> type) {
-		return null;
+	protected ArrayType doRead(Kryo kryo, Input input, Class<ArrayType> type) {
+		boolean primitive = input.readByte()==0;
+		int dimension = -1;
+		OpenType otype = null;
+		if(!primitive) {
+			dimension = input.readInt();
+		}
+		otype = (OpenType)kryo.readClassAndObject(input);
+		if(primitive) {
+			try {
+				return new ArrayType((SimpleType)otype, true);
+			} catch (OpenDataException e) {
+				throw new RuntimeException("OpenDataException when reading primitive ArrayType", e);
+			}
+		} else {
+			try {
+				return new ArrayType(dimension, otype);
+			} catch (OpenDataException e) {
+				throw new RuntimeException("OpenDataException when reading primitive ArrayType", e);
+			}			
+		}
 	}
 
 }

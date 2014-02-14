@@ -33,6 +33,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 
 /**
  * <p>Title: TabularDataSupportSerializer</p>
@@ -42,11 +43,12 @@ import com.esotericsoftware.kryo.io.Output;
  * <p><code>com.heliosapm.asyncjmx.shared.serialization.TabularDataSupportSerializer</code></p>
  */
 
-public class TabularDataSupportSerializer extends Serializer<TabularDataSupport> {
+public class TabularDataSupportSerializer extends BaseSerializer<TabularDataSupport> {
 
 	@Override
-	public void write(Kryo kryo, Output output, TabularDataSupport tds) {
-		OpenTypeSerializer.otSerializer.write(kryo, output, tds.getTabularType());
+	protected void doWrite(Kryo kryo, Output output, TabularDataSupport tds) {
+		log.info("Writing TabularDataSupport [%s]", tds.getTabularType().getDescription());
+		kryo.writeClassAndObject(output, tds.getTabularType());		
 		int size = tds.size();
 		output.write(size);
 		for(Map.Entry<Object, Object> entry: tds.entrySet()) {
@@ -56,21 +58,21 @@ public class TabularDataSupportSerializer extends Serializer<TabularDataSupport>
 	}
 
 	@Override
-	public TabularDataSupport read(Kryo kryo, Input input, Class<TabularDataSupport> type) {
+	protected TabularDataSupport doRead(Kryo kryo, Input input, Class<TabularDataSupport> type) {
 		try {
-			kryo.setReferences(true);
-			input.readByte();
-			TabularType ttype = OpenTypeSerializer.tabSerializer.read(kryo, input, TabularType.class);
+//			kryo.setReferences(true);			
+			TabularType ttype = (TabularType)kryo.readClassAndObject(input);
 			int size = input.readInt();
 			TabularDataSupport tds = new TabularDataSupport(ttype, size, 0.75f);
 			for(int i = 0; i < size; i++) {
 				Object key = kryo.readClassAndObject(input);
+				log.info("Read Key [%s]", key);
 				Object value = kryo.readClassAndObject(input);
 				tds.put(key, value);
 			}
 			return tds;
 		} finally {
-			kryo.setReferences(false);
+//			kryo.setReferences(false);
 		}
 	}
 

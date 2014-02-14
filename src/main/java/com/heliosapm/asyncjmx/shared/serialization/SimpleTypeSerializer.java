@@ -32,7 +32,6 @@ import java.util.Map;
 import javax.management.openmbean.SimpleType;
 
 import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
@@ -43,8 +42,9 @@ import com.esotericsoftware.kryo.io.Output;
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>com.heliosapm.asyncjmx.shared.serialization.SimpleTypeSerializer</code></p>
  */
-
-public class SimpleTypeSerializer extends Serializer<SimpleType> {
+@SuppressWarnings("rawtypes")
+public class SimpleTypeSerializer extends BaseSerializer<SimpleType> {
+	
 	public static final Map<Byte, SimpleType> TYPES;
 	public static final Map<SimpleType, Byte> INDEXES;
 	
@@ -70,12 +70,12 @@ public class SimpleTypeSerializer extends Serializer<SimpleType> {
 	
 	
 	@Override
-	public void write(Kryo kryo, Output output, SimpleType st) {
+	protected void doWrite(Kryo kryo, Output output, SimpleType st) {
 		output.writeByte(INDEXES.get(st));		
 	}
 
 	@Override
-	public SimpleType read(Kryo kryo, Input input, Class<SimpleType> type) {
+	protected SimpleType doRead(Kryo kryo, Input input, Class<SimpleType> type) {
 		return TYPES.get(input.readByte());
 	}
 

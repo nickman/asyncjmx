@@ -147,13 +147,18 @@ import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.CollectionSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.ArrayTypeSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.AttributeSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.CompositeTypeSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.MBeanServerNotificationSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.NonSerializable;
 import com.heliosapm.asyncjmx.shared.serialization.NullResult;
 import com.heliosapm.asyncjmx.shared.serialization.ObjectInstanceSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.ObjectNameSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.OpenTypeSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.SimpleTypeSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.TabularDataSupportSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.TabularTypeSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.UnmodifiableRandomAccessListSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.VoidResult;
 
@@ -312,6 +317,10 @@ public class KryoFactory {
 		}		
 		kryo.addDefaultSerializer(HashSet.class, CollectionSerializer.class);
 		kryo.register(runtimeForName("java.util.Collections$UnmodifiableRandomAccessList"), new UnmodifiableRandomAccessListSerializer());
+		kryo.register(ArrayType.class, new ArrayTypeSerializer());
+		kryo.register(SimpleType.class, new SimpleTypeSerializer());
+		kryo.register(TabularType.class, new TabularTypeSerializer());
+		kryo.register(CompositeType.class, new CompositeTypeSerializer());
 		return kryo;
 	}
 	
@@ -352,6 +361,7 @@ public class KryoFactory {
 	/** Don't change this order unless you know what you're doing */
 	private static final Serializer<?>[] REG_SERIALIZERS = {
 		new ObjectNameSerializer(), new ObjectInstanceSerializer(), new AttributeSerializer(), new TabularDataSupportSerializer(), new OpenTypeSerializer(),
+		new MBeanServerNotificationSerializer(),
 		//, new AttributeListSerializer()
 		//, new HashSetSerializer(),
 	};
@@ -360,8 +370,13 @@ public class KryoFactory {
 		for(Serializer<?> ser: REG_SERIALIZERS) {
 			try {
 				//read(Kryo kryo, Input input, Class<ObjectName> type)
-				Class<?> clazz = ser.getClass().getDeclaredMethod("read", Kryo.class, Input.class, Class.class).getReturnType();
-				REG_CLASS_SERIALIZERS.put(clazz, ser);
+				try {
+					Class<?> clazz = ser.getClass().getDeclaredMethod("read", Kryo.class, Input.class, Class.class).getReturnType();
+					REG_CLASS_SERIALIZERS.put(clazz, ser);
+				} catch (NoSuchMethodException nex) {
+					Class<?> clazz = ser.getClass().getDeclaredMethod("doRead", Kryo.class, Input.class, Class.class).getReturnType();
+					REG_CLASS_SERIALIZERS.put(clazz, ser);					
+				}
 			} catch (Exception ex) {
 				throw new RuntimeException("Failed to resolve serializer [" + ser.getClass().getName() + "]", ex);
 			}

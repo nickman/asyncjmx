@@ -41,28 +41,17 @@ import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
  * <p><code>com.heliosapm.asyncjmx.shared.serialization.AttributeSerializer</code></p>
  */
 
-public class AttributeSerializer extends Serializer<Attribute> {
-	/** Instance logger */
-	protected static final JMXLogger log = JMXLogger.getLogger(AttributeSerializer.class);
-
-	/**
-	 * {@inheritDoc}
-	 * @see com.esotericsoftware.kryo.Serializer#write(com.esotericsoftware.kryo.Kryo, com.esotericsoftware.kryo.io.Output, java.lang.Object)
-	 */
+public class AttributeSerializer extends BaseSerializer<Attribute> {
 	@Override
-	public void write(Kryo kryo, Output output, Attribute object) {
+	protected void doWrite(Kryo kryo, Output output, Attribute object) {
 		output.writeString(object.getName());
 		Object value = object.getValue();
 		kryo.writeClassAndObject(output, value);
 		log.info("Wrote Attribute [%s][%s]", object.getName(), value);
 	}
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.esotericsoftware.kryo.Serializer#read(com.esotericsoftware.kryo.Kryo, com.esotericsoftware.kryo.io.Input, java.lang.Class)
-	 */
 	@Override
-	public Attribute read(Kryo kryo, Input input, Class<Attribute> type) {		
+	protected Attribute doRead(Kryo kryo, Input input, Class<Attribute> type) {		
 		String name = input.readString();
 		log.info("Reading Attribute [%s]", name);
 		Object value = kryo.readClassAndObject(input);

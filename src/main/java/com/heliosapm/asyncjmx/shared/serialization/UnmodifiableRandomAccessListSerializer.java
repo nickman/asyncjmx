@@ -41,10 +41,10 @@ import com.esotericsoftware.kryo.io.Output;
  * <p><code>com.heliosapm.asyncjmx.shared.serialization.UnmodifiableRandomAccessListSerializer</code></p>
  */
 
-public class UnmodifiableRandomAccessListSerializer extends Serializer<List<?>> {
+public class UnmodifiableRandomAccessListSerializer extends BaseSerializer<List<?>> {
 
 	@Override
-	public void write(Kryo kryo, Output output, List<?> object) {
+	protected void doWrite(Kryo kryo, Output output, List<?> object) {
 		if(object.isEmpty()) {
 			output.write(0);
 		} else {
@@ -56,7 +56,7 @@ public class UnmodifiableRandomAccessListSerializer extends Serializer<List<?>> 
 	}
 
 	@Override
-	public List<Object> read(Kryo kryo, Input input, Class<List<?>> type) {
+	protected List<Object> doRead(Kryo kryo, Input input, Class<List<?>> type) {
 		int size = input.readInt();
 		List<Object> list = new ArrayList<Object>(size);
 		for(int i = 0; i < size; i++) {

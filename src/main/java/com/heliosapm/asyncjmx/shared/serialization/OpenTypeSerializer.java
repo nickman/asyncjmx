@@ -34,6 +34,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 
 /**
  * <p>Title: OpenTypeSerializer</p>
@@ -43,48 +44,25 @@ import com.esotericsoftware.kryo.io.Output;
  * <p><code>com.heliosapm.asyncjmx.shared.serialization.OpenTypeSerializer</code></p>
  */
 
-public class OpenTypeSerializer extends Serializer<OpenType> {
+public class OpenTypeSerializer extends BaseSerializer<OpenType> {
 	
 	protected static final ArrayTypeSerializer arrSerializer = new ArrayTypeSerializer();
 	protected static final SimpleTypeSerializer stSerializer = new SimpleTypeSerializer();
 	protected static final TabularTypeSerializer tabSerializer = new TabularTypeSerializer();
 	protected static final CompositeTypeSerializer ctSerializer = new CompositeTypeSerializer();
 	protected static final OpenTypeSerializer otSerializer = new OpenTypeSerializer();
-	
+	/** Instance logger */
+	protected final JMXLogger log = JMXLogger.getLogger(getClass());
 	
 	@Override
-	public void write(Kryo kryo, Output output, OpenType ot) {
-		if(ot instanceof ArrayType) {
-			output.writeByte(0);
-			arrSerializer.write(kryo, output, (ArrayType)ot);
-		} else if(ot instanceof SimpleType) {
-			output.writeByte(1);
-			stSerializer.write(kryo, output, (SimpleType)ot);
-		} else if(ot instanceof CompositeType) {
-			output.writeByte(2);
-			ctSerializer.write(kryo, output, (CompositeType)ot);
-		} else if(ot instanceof TabularType) {
-			output.writeByte(3);
-			tabSerializer.write(kryo, output, (TabularType)ot);
-		}
-		else throw new RuntimeException("Unrecognized OpenType [" + ot.getClass().getName() + "]");
+	protected void doWrite(Kryo kryo, Output output, OpenType ot) {
+		kryo.getSerializer(ot.getClass()).write(kryo, output, ot);
 	}
 
 	@Override
-	public OpenType read(Kryo kryo, Input input, Class<OpenType> type) {
-		byte t = input.readByte();
-		switch(t) {
-		case 0:
-			return arrSerializer.read(kryo, input, ArrayType.class);
-		case 1:
-			return stSerializer.read(kryo, input, SimpleType.class);
-		case 2:
-			return tabSerializer.read(kryo, input, TabularType.class);
-		case 3:
-			return ctSerializer.read(kryo, input, CompositeType.class);
-		default:
-			throw new RuntimeException("Unrecognized OpenType [" + type.getName() + "]");
-		}		
+	protected OpenType doRead(Kryo kryo, Input input, Class<OpenType> type) {
+		Class<?> clazz = kryo.readClass(input).getType();
+		return (OpenType)kryo.getSerializer(clazz).read(kryo, input, clazz);
 	}
 
 }
