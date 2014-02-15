@@ -98,7 +98,6 @@ public class JMXOpEncoder extends OneToOneEncoder {
 					if(o==null) kryo.writeClassAndObject(kout, NullResult.Instance);
 					else {
 						kryo.writeClassAndObject(kout, o);
-						log.info("================Reg: %s", kryo.getRegistration(o.getClass()));
 					}
 				}
 				//kryo.writeClassAndObject(kout, args);

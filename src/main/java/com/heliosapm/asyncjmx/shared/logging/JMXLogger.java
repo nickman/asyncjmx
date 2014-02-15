@@ -24,6 +24,8 @@
  */
 package com.heliosapm.asyncjmx.shared.logging;
 
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.text.SimpleDateFormat;
@@ -40,7 +42,7 @@ import java.util.logging.Logger;
  * <p><code>com.heliosapm.asyncjmx.shared.logging.JMXLogger</code></p>
  */
 
-public class JMXLogger {
+public class JMXLogger implements PropertyChangeListener {
 	/** The wrapped log */
 	protected final Logger log;
 	
@@ -53,7 +55,11 @@ public class JMXLogger {
 	/** The default date format for log formatters */
 	static String DATE_FORMAT = DEFAULT_DATE_FORMAT;
 	/** A map of created JMXLoggers keyed by the logger name */
-	private static final Map<String, JMXLogger> jmxLoggers = new ConcurrentHashMap<String, JMXLogger>();
+	protected static final Map<String, JMXLogger> jmxLoggers = new ConcurrentHashMap<String, JMXLogger>();
+	
+	/** A map of renderers keyed by the class they render instances of */
+	protected static final Map<Class<?>, IRenderer<?>> renderers = new ConcurrentHashMap<Class<?>, IRenderer<?>>();
+	
 	
 	/**
 	 * Update the timestamp format used by the logging formaters
@@ -76,6 +82,44 @@ public class JMXLogger {
 	 */
 	public static synchronized void ressetTimestampFormat() {
 		DATE_FORMAT = DEFAULT_DATE_FORMAT;
+	}
+	
+	/**
+	 * Returns the renderer for the passed class, or the default if no match is made
+	 * @param clazz The class to get a renderer for 
+	 * @return a renderer
+	 */
+	@SuppressWarnings("unchecked")
+	public static <T> IRenderer<T> getRenderer(Class<T> clazz) {
+		if(clazz==null) return (IRenderer<T>)IRenderer.DEFAULT;
+		IRenderer<T> ren = (IRenderer<T>) renderers.get(clazz);
+		if(ren==null) {
+			Class<?> c = clazz;
+			while(clazz.getSuperclass()!=Object.class) {
+				c = c.getSuperclass();
+				ren = (IRenderer<T>) renderers.get(c);
+				if(ren!=null) {
+					renderers.put(c, ren);
+					break;
+				}
+			}
+		}
+		if(ren==null) {
+			renderers.put(clazz, IRenderer.DEFAULT);
+			ren = (IRenderer<T>) IRenderer.DEFAULT;
+		}
+		return ren;
+	}
+	
+	/**
+	 * Registers a renderer for the passed class
+	 * @param clazz The class to associate the renderer with
+	 * @param renderer The renderer to register
+	 */
+	public static <T> void registerRenderer(Class<T> clazz, IRenderer<T> renderer) {
+		if(clazz==null) throw new IllegalArgumentException("The passed class was null");
+		if(renderer==null) throw new IllegalArgumentException("The passed renderer was null");
+		renderers.put(clazz, renderer);
 	}
 	
 	/**
@@ -216,6 +260,12 @@ public class JMXLogger {
 		sw.append(EOL).append(t.getClass().getName()).append(":").append(EOL);
 		t.printStackTrace(new PrintWriter(sw));
 		return sw.toString();
+	}
+
+	@Override
+	public void propertyChange(PropertyChangeEvent evt) {
+		// TODO Auto-generated method stub
+		
 	}
 	
 }

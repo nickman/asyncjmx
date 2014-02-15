@@ -170,7 +170,7 @@ public class JMXServerPipelineFactory implements ChannelPipelineFactory {
 	JMXServerPipelineFactory(ChannelUpstreamHandler connHandler, boolean startTls, long handshakeTimeoutInMillis) {
 		SSL = handshakeTimeoutInMillis >= 0;
 		this.handshakeTimeoutInMillis = handshakeTimeoutInMillis;
-		LOG_NAME = SSL ? TCP_SERVER_NAME : SSL_SERVER_NAME;
+		LOG_NAME = SSL ? SSL_SERVER_NAME : TCP_SERVER_NAME;
 		log = Logger.getLogger(LOG_NAME);
 		loggingHandlers = initLogHandlers();
 		executionHandler = new ExecutionHandler(new OrderedMemoryAwareThreadPoolExecutor(16, 1048576, 1048576));
