@@ -24,6 +24,7 @@
  */
 package com.heliosapm.asyncjmx.server.serialization;
 
+
 /**
  * <p>Title: JMXOpDecodeStep</p>
  * <p>Description: Replay decoder enum for JMX Op Decodes</p> 
@@ -33,13 +34,17 @@ package com.heliosapm.asyncjmx.server.serialization;
  */
 
 public enum JMXOpDecodeStep {
-	/** The one byte op code */
-	OPCODE,
+	/** The total byte size of the entire op */
+	BYTESIZE,
 	/** The one int request id */
 	REQUESTID,
-	/** The size of the arg playload in bytes */
-	ARGBYTESIZE,
+	/** The one byte op code */
+	OPCODE,
+	/** The number of args */
+	ARGCOUNT,
 	/** The op args */
-	ARGS;
-
+	ARGS,
+	/** The op args 2 */
+	ARGS2;
+	
 }

@@ -30,9 +30,8 @@ import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelHandlerContext;
 
 import com.esotericsoftware.kryo.io.UnsafeInput;
-import com.heliosapm.asyncjmx.client.JMXOpResponse;
+import com.heliosapm.asyncjmx.client.JMXOp;
 import com.heliosapm.asyncjmx.server.JMXOpInvocation;
-import com.heliosapm.asyncjmx.shared.KryoFactory;
 import com.heliosapm.asyncjmx.shared.serialization.KryoReplayingDecoder;
 
 /**
@@ -55,6 +54,11 @@ public class JMXOpDecoder extends  KryoReplayingDecoder<JMXOpDecodeStep> {
 	
 	/** The op invocation being decoded */
 	protected JMXOpInvocation opInvocation = null;
+
+	/** The JMXOp invocation being decoded */
+	protected JMXOp jmxOp = null;
+
+	
 	/** The chanel buffer's input stream */
 	protected ChannelBufferInputStream is = null;
 	/** The kryo input associated to the channel buffer input stream */

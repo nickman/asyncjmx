@@ -80,8 +80,6 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 	protected final Channel channel;
 	/** The timeout for JMX invocations in ms */
 	protected final long timeout;
-	/** The request id serial number factory */
-	protected final AtomicInteger serial = new AtomicInteger(0);
 	/** The synchnonous queue on which the requesting thread waits on a response */
 	protected final SynchronousQueue<Object> timeoutQueue = new SynchronousQueue<Object>();
 	/** The current rid we're waiting on */
@@ -104,34 +102,25 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 	
 	/**
 	 * Writes the JMX invocation request to the remote server to invoke a void return operation
-	 * @param opCode The op code for the jmx operation being invoked
-	 * @param args The arguments to the invocation
+	 * @param op The JMX invocation to send to the remote
 	 */
-	protected void writeRequest(JMXOpCode opCode, Object...args) {
-		writeRequest(VoidResult.class, opCode, args);
+	protected void writeRequest(JMXOp op) {
+		writeRequest(VoidResult.class, op);
 	}
 	
 	
 	/**
 	 * Writes the JMX invocation request to the remote server
 	 * @param returnType The expected return type, defaults to {@link VoidResult} if null.
-	 * @param opCode The op code for the jmx operation being invoked
-	 * @param args The arguments to the invocation
-	 * @return the response to the request if sync, or null if async
+	 * @param op The JMX invocation to send to the remote
 	 */
 	@SuppressWarnings("unchecked")
-	protected <T> T writeRequest(Class<T> returnType, final JMXOpCode opCode, Object...args) {
-		log.info("\n\t****\n\tCalling [%s]\n\t****", opCode.name());
-		if(returnType==null) returnType = (Class<T>) VoidResult.class;
-		int rId = serial.incrementAndGet();
-		currentRid.set(rId);
-		for(int i = 0; i < args.length; i++) {
-			if(args[i]==null) args[i] = NullResult.Instance;
-		}
-		channel.write(new Object[] {opCode.opCode, rId, args}).addListener(new ChannelFutureListener() {
+	protected <T> T writeRequest(Class<T> returnType, final JMXOp op) {
+		currentRid.set(op.getOpSeq());
+		channel.write(op).addListener(new ChannelFutureListener() {
 			@Override
 			public void operationComplete(ChannelFuture future) throws Exception {
-				log.info("Write for op [%s] complete", opCode.name());
+				log.info("Write for op [%s] complete", op.getJmxOpCode().name());
 			}
 		});
 		Object retValue = null;
@@ -238,7 +227,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
      *
      */
     public ObjectInstance createMBean(String className, ObjectName name) throws ReflectionException, InstanceAlreadyExistsException, MBeanRegistrationException, MBeanException, NotCompliantMBeanException, IOException {
-    	return writeRequest(ObjectInstance.class, JMXOpCode.CREATEMBEAN_SO, className, name);
+    	return writeRequest(ObjectInstance.class, JMXOp.newOp(channel, JMXOpCode.CREATEMBEAN_SO, className, name));
     }
 
     /**
@@ -297,7 +286,8 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 		   MBeanRegistrationException, MBeanException,
 		   NotCompliantMBeanException, InstanceNotFoundException,
 		   IOException {
-    	return writeRequest(ObjectInstance.class, JMXOpCode.CREATEMBEAN_SOO, className, name);
+    	return writeRequest(ObjectInstance.class, JMXOp.newOp(channel, JMXOpCode.CREATEMBEAN_SOO, className, name, loaderName));
+    	
     }
 
 
@@ -353,7 +343,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 	    throws ReflectionException, InstanceAlreadyExistsException,
 	    	   MBeanRegistrationException, MBeanException,
 	    	   NotCompliantMBeanException, IOException {
-    	return writeRequest(ObjectInstance.class, JMXOpCode.CREATEMBEAN_SOOS, className, name);
+    	return writeRequest(ObjectInstance.class, JMXOp.newOp(channel, JMXOpCode.CREATEMBEAN_SOOS, className, name, params, signature));
     }
 
     /**
@@ -413,7 +403,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 	    	   MBeanRegistrationException, MBeanException,
 	    	   NotCompliantMBeanException, InstanceNotFoundException,
 	    	   IOException {
-    	return writeRequest(ObjectInstance.class, JMXOpCode.CREATEMBEAN_SOOOS, className, name);
+    	return writeRequest(ObjectInstance.class, JMXOp.newOp(channel, JMXOpCode.CREATEMBEAN_SOOOS, className, name, loaderName, params, signature));    	
     }
 
     /**
@@ -441,7 +431,8 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
     public void unregisterMBean(ObjectName name)
 	    throws InstanceNotFoundException, MBeanRegistrationException,
 	    	   IOException {
-    	writeRequest(ObjectInstance.class, JMXOpCode.UNREGISTERMBEAN, name);
+    	writeRequest(JMXOp.newOp(channel, JMXOpCode.UNREGISTERMBEAN, name));
+
     }
 
     /**
@@ -462,7 +453,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
      */
     public ObjectInstance getObjectInstance(ObjectName name)
 	    throws InstanceNotFoundException, IOException {
-    	return writeRequest(ObjectInstance.class, JMXOpCode.GETOBJECTINSTANCE, name);
+    	return writeRequest(ObjectInstance.class, JMXOp.newOp(channel, JMXOpCode.GETOBJECTINSTANCE, name));
     }
 
     /**
@@ -494,7 +485,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
     @SuppressWarnings("unchecked")
 	public Set<ObjectInstance> queryMBeans(ObjectName name, QueryExp query)
 	    throws IOException {
-    	return (Set<ObjectInstance>) writeRequest(JMXOpCode.QUERYMBEANS.returnType, JMXOpCode.QUERYMBEANS, name, query);
+    	return (Set<ObjectInstance>) writeRequest(JMXOpCode.QUERYMBEANS.returnType, JMXOp.newOp(channel, JMXOpCode.QUERYMBEANS, name, query));
     }
 
     /**
@@ -525,7 +516,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
     @SuppressWarnings("unchecked")
 	public Set<ObjectName> queryNames(ObjectName name, QueryExp query)
 	    throws IOException {
-    	return (Set<ObjectName>) writeRequest(JMXOpCode.QUERYNAMES.returnType, JMXOpCode.QUERYNAMES, name, query);
+    	return (Set<ObjectName>) writeRequest(JMXOpCode.QUERYNAMES.returnType, JMXOp.newOp(channel, JMXOpCode.QUERYNAMES, name, query));
     }
 
 
@@ -547,7 +538,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
      */
     public boolean isRegistered(ObjectName name)
 	    throws IOException {
-    	return writeRequest(Boolean.class, JMXOpCode.ISREGISTERED, name);
+    	return writeRequest(Boolean.class, JMXOp.newOp(channel, JMXOpCode.ISREGISTERED, name));
     }
 
 
@@ -561,7 +552,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
      */
     public Integer getMBeanCount()
 	    throws IOException {
-    	return writeRequest(Integer.class, JMXOpCode.GETMBEANCOUNT);
+    	return writeRequest(Integer.class, JMXOp.newOp(channel, JMXOpCode.GETMBEANCOUNT));
     }
 
     /**
@@ -597,7 +588,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 	    throws MBeanException, AttributeNotFoundException,
 	    	ReflectionException, InstanceNotFoundException,
 	    	   IOException {
-    	return writeRequest(Object.class, JMXOpCode.GETATTRIBUTE, name, attribute);
+    	return writeRequest(Object.class, JMXOp.newOp(channel, JMXOpCode.GETATTRIBUTE, name, attribute));
     }
 
 
@@ -626,7 +617,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
     public AttributeList getAttributes(ObjectName name, String[] attributes)
 	    throws InstanceNotFoundException, ReflectionException,
 		   IOException {
-    	return writeRequest(AttributeList.class, JMXOpCode.GETATTRIBUTES, name, attributes);
+    	return writeRequest(AttributeList.class, JMXOp.newOp(channel, JMXOpCode.GETATTRIBUTES, name, attributes));
     }
 
     /**
@@ -662,7 +653,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 	    throws InstanceNotFoundException, AttributeNotFoundException,
 		   InvalidAttributeValueException, MBeanException, 
 		   ReflectionException, IOException {
-    	writeRequest(JMXOpCode.SETATTRIBUTE, name, attribute);
+    	writeRequest(JMXOp.newOp(channel, JMXOpCode.SETATTRIBUTE, name, attribute));
     }
 
 
@@ -694,7 +685,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
     public AttributeList setAttributes(ObjectName name,
 				       AttributeList attributes)
 	throws InstanceNotFoundException, ReflectionException, IOException {
-    	return writeRequest(AttributeList.class, JMXOpCode.SETATTRIBUTES, name, attributes);
+    	return writeRequest(AttributeList.class, JMXOp.newOp(channel, JMXOpCode.SETATTRIBUTES, name, attributes));
     }
 
     /**
@@ -728,7 +719,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 			 Object params[], String signature[])
 	    throws InstanceNotFoundException, MBeanException,
 		   ReflectionException, IOException {
-    	return writeRequest(Object.class, JMXOpCode.INVOKE, name, operationName, params, signature);
+    	return writeRequest(Object.class, JMXOp.newOp(channel, JMXOpCode.INVOKE, name, operationName, params, signature));
     }
  
 
@@ -745,7 +736,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
      */
     public String getDefaultDomain()
 	    throws IOException {
-    	return writeRequest(String.class, JMXOpCode.GETDEFAULTDOMAIN);
+    	return writeRequest(String.class, JMXOp.newOp(channel, JMXOpCode.GETDEFAULTDOMAIN));
     }
 
     /**
@@ -765,7 +756,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
      */
     public String[] getDomains()
 	    throws IOException {
-    	return writeRequest(String[].class, JMXOpCode.GETDOMAINS);
+    	return writeRequest(String[].class, JMXOp.newOp(channel, JMXOpCode.GETDOMAINS));
     }
 
     /**
@@ -799,7 +790,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 					NotificationFilter filter,
 					Object handback)
 	    throws InstanceNotFoundException, IOException {
-    	writeRequest(JMXOpCode.ADDNOTIFICATIONLISTENER_ONNO, name, listener, filter, handback);
+    	writeRequest(JMXOp.newOp(channel, JMXOpCode.ADDNOTIFICATIONLISTENER_ONNO, name, listener, filter, handback));
     }
 
 
@@ -845,7 +836,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 					NotificationFilter filter,
 					Object handback)
 	    throws InstanceNotFoundException, IOException {
-    	writeRequest(JMXOpCode.ADDNOTIFICATIONLISTENER_OONO, name, listener, filter, handback);
+    	writeRequest(JMXOp.newOp(channel, JMXOpCode.ADDNOTIFICATIONLISTENER_OONO, name, listener, filter, handback));
     }
 
 
@@ -874,7 +865,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 					   ObjectName listener) 
 	throws InstanceNotFoundException, ListenerNotFoundException,
 	       IOException {
-    	writeRequest(JMXOpCode.REMOVENOTIFICATIONLISTENER_OO, name, listener);
+    	writeRequest(JMXOp.newOp(channel, JMXOpCode.REMOVENOTIFICATIONLISTENER_OO, name, listener));
     }
 
     /**
@@ -916,7 +907,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 					   Object handback)
 	    throws InstanceNotFoundException, ListenerNotFoundException,
 		   IOException {
-    	writeRequest(JMXOpCode.REMOVENOTIFICATIONLISTENER_OONO, name, listener, filter, handback);
+    	writeRequest(JMXOp.newOp(channel, JMXOpCode.REMOVENOTIFICATIONLISTENER_OONO, name, listener, filter, handback));
     }
 
 
@@ -945,7 +936,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 					   NotificationListener listener)
 	    throws InstanceNotFoundException, ListenerNotFoundException,
 		   IOException {
-    	writeRequest(JMXOpCode.REMOVENOTIFICATIONLISTENER_ON, name, listener);
+    	writeRequest(JMXOp.newOp(channel, JMXOpCode.REMOVENOTIFICATIONLISTENER_ON, name, listener));
     }
 
     /**
@@ -987,7 +978,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 					   Object handback)
 	    throws InstanceNotFoundException, ListenerNotFoundException,
 		   IOException {
-    	writeRequest(JMXOpCode.REMOVENOTIFICATIONLISTENER_ONNO, name, listener, filter, handback);
+    	writeRequest(JMXOp.newOp(channel, JMXOpCode.REMOVENOTIFICATIONLISTENER_ONNO, name, listener, filter, handback));
     }
 
     /**
@@ -1011,7 +1002,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
     public MBeanInfo getMBeanInfo(ObjectName name)
 	    throws InstanceNotFoundException, IntrospectionException,
 	    	   ReflectionException, IOException {
-    	return writeRequest(MBeanInfo.class, JMXOpCode.GETMBEANINFO, name);
+    	return writeRequest(MBeanInfo.class, JMXOp.newOp(channel, JMXOpCode.GETMBEANINFO, name));
     }
 
  
@@ -1053,7 +1044,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
      */
     public boolean isInstanceOf(ObjectName name, String className)
 	    throws InstanceNotFoundException, IOException {
-    	return writeRequest(Boolean.class, JMXOpCode.ISINSTANCEOF, name, className);
+    	return writeRequest(Boolean.class, JMXOp.newOp(channel, JMXOpCode.ISINSTANCEOF, name, className));
     }
 
 }

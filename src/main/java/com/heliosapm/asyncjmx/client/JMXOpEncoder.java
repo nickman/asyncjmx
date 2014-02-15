@@ -24,7 +24,8 @@
  */
 package com.heliosapm.asyncjmx.client;
 
-import java.util.Arrays;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBufferFactory;
@@ -39,9 +40,10 @@ import org.jboss.netty.handler.codec.oneone.OneToOneEncoder;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.io.UnsafeOutput;
+import com.heliosapm.asyncjmx.shared.JMXOpCode;
 import com.heliosapm.asyncjmx.shared.KryoFactory;
 import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
-import com.heliosapm.asyncjmx.shared.serialization.NullResult;
+import com.heliosapm.asyncjmx.unsafe.collections.ConcurrentLongSlidingWindow;
 
 /**
  * <p>Title: JMXOpEncoder</p>
@@ -56,15 +58,54 @@ public class JMXOpEncoder extends OneToOneEncoder {
 	protected ChannelBufferFactory bufferFactory = new HeapChannelBufferFactory();
 	/** Instance logger */
 	protected final JMXLogger log = JMXLogger.getLogger(getClass());
+
+	/** A histogram of JMXOpCode serialization sizes */
+	protected Map<JMXOpCode, ConcurrentLongSlidingWindow> opSizeHistory = new ConcurrentHashMap<JMXOpCode, ConcurrentLongSlidingWindow>();
+	/** The default sampling size for JMXOp serialization sizes histograms */
+	public static final int DEFAULT_HISTOGRAM_SIZE = 128;
+	/** The default percentile to calculate estimated sizes with */
+	public static final int DEFAULT_HISTOGRAM_PERCENTILE = 90;
+	/** The default byte size estimate if the histogram has less than 2 samples */
+	public static final int DEFAULT_SIZE = 1024;
+	
+	/**
+	 * Acquires the histogram for the passed JMXOpCode
+	 * @param opCode The JMXOpCode to get the histogram for
+	 * @return the histogram
+	 */
+	protected ConcurrentLongSlidingWindow getJMXOpHistogram(JMXOpCode opCode) {
+		ConcurrentLongSlidingWindow csw = opSizeHistory.get(opCode);
+		if(csw==null) {
+			synchronized(opSizeHistory) {
+				csw = opSizeHistory.get(opCode);
+				if(csw==null) {
+					csw = new ConcurrentLongSlidingWindow(DEFAULT_HISTOGRAM_SIZE);
+					opSizeHistory.put(opCode, csw);
+				}
+			}
+		}
+		return csw;
+	}
+	
+	
+	/**
+	 * Adds a new sampling to the JMXOpCode histogram
+	 * @param op The jmx op for which a sample was taken
+	 * @param size The sampled size in bytes 
+	 */
+	protected void sample(JMXOp op, int size) {
+		getJMXOpHistogram(op.getJmxOpCode()).insert(size);
+	}
 	
 	/**
 	 * Estimates the size of the payload
-	 * @param opCode The op code of the jmx op being serialized
-	 * @param payload The payload to extimate the size of
+	 * @param op The JMX Op being serialized
 	 * @return the estimated size in bytes
 	 */
-	protected int estimateSize(byte opCode, Object[] payload) {
-		return 1024;
+	protected int estimateSize(JMXOp op) {
+		ConcurrentLongSlidingWindow csw = getJMXOpHistogram(op.getJmxOpCode());
+		if(csw.size() < 2) return DEFAULT_SIZE;
+		return (int)csw.percentile(DEFAULT_HISTOGRAM_PERCENTILE);
 	}
 	
 
@@ -75,37 +116,23 @@ public class JMXOpEncoder extends OneToOneEncoder {
 	 */
 	@Override
 	protected Object encode(ChannelHandlerContext ctx, Channel channel, Object msg) throws Exception {
-		if(msg instanceof Object[]) {
-			Object[]  payload = (Object[])msg;     // {opCode, rId, args}
-			Object[]  args = (Object[])payload[2];
-			byte opCode = (Byte)payload[0];
-			ChannelBuffer header = ChannelBuffers.buffer(9);			
-			header.writeByte(opCode);  // 1  byte for op code
-			header.writeInt((Integer)payload[1]); // 4 bytes for request id
-			final int sizeOffset = header.writerIndex();
-			if(args.length==0) {
-				log.info("Sending Zero Arg Encoded Op");
-				return header;
-			}
+		if(msg instanceof JMXOp) {
+			final JMXOp jmxOp = (JMXOp)msg;
 			Output kout = null;
 			ChannelBufferOutputStream out = null;
 			try {
-				ChannelBuffer body = ChannelBuffers.dynamicBuffer(estimateSize(opCode, payload), bufferFactory);
+				ChannelBuffer body = ChannelBuffers.dynamicBuffer(estimateSize(jmxOp), bufferFactory);
+				body.setInt(0, 0);
 				out = new ChannelBufferOutputStream(body);			
 				Kryo kryo = KryoFactory.getInstance().getKryo(channel);			
 				kout = new UnsafeOutput(out);
-				for(Object o: args) {
-					if(o==null) kryo.writeClassAndObject(kout, NullResult.Instance);
-					else {
-						kryo.writeClassAndObject(kout, o);
-					}
-				}
-				//kryo.writeClassAndObject(kout, args);
+				kryo.writeClassAndObject(kout, jmxOp);
 				kout.flush();
 				out.flush();
-//				header.setInt(sizeOffset, body.writerIndex());
-				log.info("Sending Encoded Op with [%s] args and [%s] bytes.  Args: %s", args.length, body.writerIndex(), Arrays.toString(args));
-				return ChannelBuffers.wrappedBuffer(header, body);
+				body.setInt(0, body.writerIndex());
+				log.info("Sending Encoded Op with [%s] bytes.  Op: %s", body.writerIndex(), jmxOp);
+				sample(jmxOp, body.writerIndex());
+				return body;
 			} finally {
 				if(kout!=null) try { kout.close(); } catch (Exception x) { /* No Op */ }
 				if(out!=null) try { out.close(); } catch (Exception x) { /* No Op */ }

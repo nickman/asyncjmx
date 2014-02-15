@@ -47,7 +47,7 @@ import org.jboss.netty.logging.InternalLogLevel;
 import org.jboss.netty.util.HashedWheelTimer;
 import org.jboss.netty.util.Timer;
 
-import com.heliosapm.asyncjmx.server.serialization.JMXOpDecoder;
+import com.heliosapm.asyncjmx.server.serialization.JMXOpDecoder2;
 import com.heliosapm.asyncjmx.server.serialization.JMXResponseEncoder;
 import com.heliosapm.asyncjmx.server.ssl.SecureJMXSslContextFactory;
 
@@ -209,7 +209,7 @@ public class JMXServerPipelineFactory implements ChannelPipelineFactory {
 		}
 		pipeline.addLast(CONN_HANDLER_NAME, connHandler);
 		pipeline.addLast(EXEC_HANDLER_NAME, executionHandler);
-		pipeline.addLast(JMXOPDECODE_HANDLER_NAME, new JMXOpDecoder());
+		pipeline.addLast(JMXOPDECODE_HANDLER_NAME, new JMXOpDecoder2());
 		pipeline.addLast(JMXRERSPONSE_ENCODER_NAME, this.responseEncoder);
 		pipeline.addLast(JMXINVOCATION_HANDLER_NAME, jmxInvocationHandler);
 		// <-----  and back down again ------ >
