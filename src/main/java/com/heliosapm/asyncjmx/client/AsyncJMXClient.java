@@ -105,15 +105,19 @@ public class AsyncJMXClient implements ChannelUpstreamHandler {
 		clientBootstrap.setPipelineFactory(new JMXClientPipelineFactory(this));		
 	}
 	
-	public MBeanServerConnection connectMBeanServerConnection(String host, int port) {
+	public MBeanServerConnection connectMBeanServerConnection(String host, int port, boolean async) {
 		Channel channel = clientBootstrap.connect(new InetSocketAddress(host, port)).awaitUninterruptibly().getChannel();
-		return new SyncMBeanServerConnection(channel, 120000);
+		if(!async) {
+			return new SyncMBeanServerConnection(channel, 5000);
+		}
+		throw new RuntimeException("No async yet");
+		
 	}
 	
 	public static void main(String[] args) {
 		AsyncJMXClient client = new AsyncJMXClient();
 		try {
-			MBeanServerConnection conn = client.connectMBeanServerConnection("localhost", 9061);
+			MBeanServerConnection conn = client.connectMBeanServerConnection("localhost", 9061, false);
 			System.out.println("DefaultDomain:" + conn.getDefaultDomain());
 			MBeanInfo minfo = conn.getMBeanInfo(new ObjectName("java.lang:name=PS MarkSweep,type=GarbageCollector"));
 			System.out.println("Minfo:\n" + minfo);

@@ -33,11 +33,9 @@ import java.lang.management.MemoryType;
 import java.lang.management.MemoryUsage;
 import java.lang.management.MonitorInfo;
 import java.lang.management.ThreadInfo;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -111,7 +109,6 @@ import javax.management.modelmbean.ModelMBeanNotificationInfo;
 import javax.management.modelmbean.ModelMBeanOperationInfo;
 import javax.management.modelmbean.RequiredModelMBean;
 import javax.management.openmbean.ArrayType;
-import javax.management.openmbean.CompositeData;
 import javax.management.openmbean.CompositeDataInvocationHandler;
 import javax.management.openmbean.CompositeDataSupport;
 import javax.management.openmbean.CompositeType;
@@ -145,19 +142,18 @@ import org.objenesis.strategy.StdInstantiatorStrategy;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
-import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.CollectionSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.ArrayTypeSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.AttributeSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.CompositeDataSupportSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.CompositeTypeSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.MBeanInfoSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.MBeanServerNotificationSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.NonSerializable;
 import com.heliosapm.asyncjmx.shared.serialization.NullResult;
 import com.heliosapm.asyncjmx.shared.serialization.ObjectInstanceSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.ObjectNameSerializer;
-import com.heliosapm.asyncjmx.shared.serialization.OpenTypeSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.SimpleTypeSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.TabularDataSupportSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.TabularTypeSerializer;
@@ -295,14 +291,28 @@ public class KryoFactory {
 	 */
 	public Kryo newKryo() {
 		Kryo kryo = new Kryo();
-		kryo.setDefaultSerializer(AsyncJMXSerializerFactory.getInstance());
+//		kryo.setDefaultSerializer(AsyncJMXSerializerFactory.getInstance());
 		kryo.setAsmEnabled(true);
 		kryo.setReferences(false);
 		kryo.setInstantiatorStrategy(new StdInstantiatorStrategy());
 		for(Class<?> clazz: REG_CLASSES) {
 			kryo.register(clazz);
 		}
-		AsyncJMXSerializerFactory.getInstance().addRegistered(kryo);
+//		AsyncJMXSerializerFactory.getInstance().addRegistered(kryo);
+		kryo.register(runtimeForName("java.util.Collections$UnmodifiableRandomAccessList"), new UnmodifiableRandomAccessListSerializer());
+		kryo.register(runtimeForName("sun.management.GcInfoCompositeData"), new CompositeDataSupportSerializer());
+		kryo.register(ArrayType.class, new ArrayTypeSerializer());
+		kryo.register(SimpleType.class, new SimpleTypeSerializer());
+		kryo.register(TabularType.class, new TabularTypeSerializer());
+		kryo.register(TabularDataSupport.class, new TabularDataSupportSerializer());
+		kryo.register(CompositeType.class, new CompositeTypeSerializer());
+		kryo.register(CompositeDataSupport.class, new CompositeDataSupportSerializer());
+//		kryo.register(HashSet.class, new CollectionSerializer());
+		kryo.register(ObjectName.class, new ObjectNameSerializer());
+		kryo.register(ObjectInstance.class, new ObjectInstanceSerializer());
+		kryo.register(Attribute.class, new AttributeSerializer());
+		kryo.register(MBeanServerNotification.class, new MBeanServerNotificationSerializer());
+		kryo.register(MBeanInfo.class, new MBeanInfoSerializer());
 		return kryo;
 	}
 	

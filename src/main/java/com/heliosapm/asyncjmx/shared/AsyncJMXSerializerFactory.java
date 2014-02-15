@@ -12,6 +12,7 @@ import javax.management.MBeanInfo;
 import javax.management.MBeanServerNotification;
 import javax.management.ObjectInstance;
 import javax.management.ObjectName;
+import javax.management.QueryEval;
 import javax.management.openmbean.ArrayType;
 import javax.management.openmbean.CompositeDataSupport;
 import javax.management.openmbean.CompositeType;
@@ -97,11 +98,10 @@ public class AsyncJMXSerializerFactory implements SerializerFactory {
 		classRegistryPut(Attribute.class, new AttributeSerializer());
 		classRegistryPut(MBeanServerNotification.class, new MBeanServerNotificationSerializer());
 		classRegistryPut(MBeanInfo.class, new MBeanInfoSerializer());
-		classRegistryPut(javax.management.QueryEval.class, javaSerializer);
 		log.info("Created Singleton AsyncJMXSerializerFactory Instance");
 	}
 /*	new OpenTypeSerializer(),
-	new MBeanServerNotificationSerializer()
+
 */	
 	
 	private void classRegistryPut(Class<?> clazz, Serializer<?> ser) {
@@ -123,6 +123,10 @@ public class AsyncJMXSerializerFactory implements SerializerFactory {
 	@Override
 	public Serializer<?> makeSerializer(Kryo kryo, Class<?> type) {
 		Serializer<?> ser = classRegistry.get(type);
+//		if(QueryEval.class.isAssignableFrom(type)) {
+//			classRegistryPut(type, javaSerializer);
+//			return javaSerializer;
+//		}
 		if(ser!=null) return ser;
 		return defaultSerializerFactory.makeSerializer(kryo, type);
 	}

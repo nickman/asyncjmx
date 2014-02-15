@@ -54,9 +54,11 @@ import com.heliosapm.asyncjmx.shared.serialization.ObjectNameSerializer;
 
 public enum JMXOpCode {
 	/** JMX Op enum member for {@link MBeanServerConnection#queryMBeans(javax.management.ObjectName,javax.management.QueryExp)} */
-	QUERYMBEANS((byte)0, java.util.HashSet.class, new CollectionSerializer(ObjectInstance.class, new ObjectInstanceSerializer(), false), ObjectName.class, QueryExp.class),
+	//QUERYMBEANS((byte)0, java.util.HashSet.class, new CollectionSerializer(ObjectInstance.class, new ObjectInstanceSerializer(), false), ObjectName.class, QueryExp.class),
+	QUERYMBEANS((byte)0, java.util.HashSet.class, ObjectName.class, QueryExp.class),
 	/** JMX Op enum member for {@link MBeanServerConnection#queryNames(javax.management.ObjectName,javax.management.QueryExp)} */
-	QUERYNAMES((byte)1, java.util.HashSet.class, new CollectionSerializer(ObjectName.class, new ObjectNameSerializer(), false), ObjectName.class, QueryExp.class),
+//	QUERYNAMES((byte)1, java.util.HashSet.class, new CollectionSerializer(ObjectName.class, new ObjectNameSerializer(), false), ObjectName.class, QueryExp.class),
+	QUERYNAMES((byte)1, java.util.HashSet.class, ObjectName.class, QueryExp.class),
 	/** JMX Op enum member for {@link MBeanServerConnection#getMBeanCount()} */
 	GETMBEANCOUNT((byte)2, java.lang.Integer.class),
 	/** JMX Op enum member for {@link MBeanServerConnection#getDefaultDomain()} */
@@ -76,7 +78,8 @@ public enum JMXOpCode {
 	/** JMX Op enum member for {@link MBeanServerConnection#removeNotificationListener(javax.management.ObjectName,javax.management.NotificationListener)} */
 	REMOVENOTIFICATIONLISTENER_ON((byte)10, void.class, ObjectName.class, NotificationListener.class),
 	/** JMX Op enum member for {@link MBeanServerConnection#getMBeanInfo(javax.management.ObjectName)} */
-	GETMBEANINFO((byte)11, javax.management.MBeanInfo.class, new MBeanInfoSerializer(), ObjectName.class),
+	GETMBEANINFO((byte)11, javax.management.MBeanInfo.class, ObjectName.class),
+//	GETMBEANINFO((byte)11, javax.management.MBeanInfo.class, new MBeanInfoSerializer(), ObjectName.class),
 	/** JMX Op enum member for {@link MBeanServerConnection#createMBean(java.lang.String,javax.management.ObjectName,javax.management.ObjectName,java.lang.Object[],java.lang.String[])} */
 	CREATEMBEAN_SOOOS((byte)12, javax.management.ObjectInstance.class, String.class, ObjectName.class, ObjectName.class, Object[].class, String[].class),
 	/** JMX Op enum member for {@link MBeanServerConnection#createMBean(java.lang.String,javax.management.ObjectName,java.lang.Object[],java.lang.String[])} */
@@ -139,7 +142,8 @@ public enum JMXOpCode {
 	private final Serializer<?> serializer;
 	
 	public boolean hasSerializer() {
-		return serializer!=null;
+//		return serializer!=null;
+		return false;
 	}
 	
 	public Serializer<?> getSerializer() {
