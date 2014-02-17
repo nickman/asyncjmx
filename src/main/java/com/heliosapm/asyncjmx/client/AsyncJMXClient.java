@@ -123,33 +123,33 @@ public class AsyncJMXClient implements ChannelUpstreamHandler {
 			System.out.println("Minfo:\n" + minfo);
 			
 			
-			Set<ObjectName> objectNames = conn.queryNames(null, null);
-			if(objectNames!=null) {
-				System.out.println("ObjectNames:" + objectNames.size());
-				for(Object on: objectNames) {
-					System.out.println("\t" + on);
-				}
-			} else {
-				System.out.println("QueryNames Failed");
-			}
-			Set<ObjectInstance> objectInstances = conn.queryMBeans(null, null);
-			if(objectInstances!=null) {
-				System.out.println("ObjectInstances:" + objectInstances.size());
-				for(Object on: objectInstances) {
-					System.out.println("\t" + on);
-				}
-			} else {
-				System.out.println("QueryMBeans Failed");
-			}
-			for(ObjectName on: conn.queryNames(null, null)) {
-				minfo = conn.getMBeanInfo(on);
-				Set<String> attrNames = new HashSet<String>();
-				for(MBeanAttributeInfo ma: minfo.getAttributes()) {
-					attrNames.add(ma.getName());
-				}
-				conn.getAttributes(on, attrNames.toArray(new String[attrNames.size()]));
-			}
-			
+//			Set<ObjectName> objectNames = conn.queryNames(null, null);
+//			if(objectNames!=null) {
+//				System.out.println("ObjectNames:" + objectNames.size());
+//				for(Object on: objectNames) {
+//					System.out.println("\t" + on);
+//				}
+//			} else {
+//				System.out.println("QueryNames Failed");
+//			}
+//			Set<ObjectInstance> objectInstances = conn.queryMBeans(null, null);
+//			if(objectInstances!=null) {
+//				System.out.println("ObjectInstances:" + objectInstances.size());
+//				for(Object on: objectInstances) {
+//					System.out.println("\t" + on);
+//				}
+//			} else {
+//				System.out.println("QueryMBeans Failed");
+//			}
+//			for(ObjectName on: conn.queryNames(null, null)) {
+//				minfo = conn.getMBeanInfo(on);
+//				Set<String> attrNames = new HashSet<String>();
+//				for(MBeanAttributeInfo ma: minfo.getAttributes()) {
+//					attrNames.add(ma.getName());
+//				}
+//				conn.getAttributes(on, attrNames.toArray(new String[attrNames.size()]));
+//			}
+//			
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);
 		} finally {

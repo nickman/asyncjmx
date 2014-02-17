@@ -126,12 +126,13 @@ public class JMXOpEncoder extends OneToOneEncoder {
 				out = new ChannelBufferOutputStream(body);			
 				Kryo kryo = KryoFactory.getInstance().getKryo(channel);			
 				kout = new UnsafeOutput(out);
-				kryo.writeClassAndObject(kout, jmxOp);
-				kout.flush();
-				out.flush();
+				kryo.writeObject(kout, jmxOp);
 				body.setInt(0, body.writerIndex());
-				log.info("Sending Encoded Op with [%s] bytes.  Op: %s", body.writerIndex(), jmxOp);
-				sample(jmxOp, body.writerIndex());
+				kout.flush();
+				out.flush();		
+				
+				log.info("Sending Encoded Op with [%s] bytes.  Total Payload: [%s].  Op: %s", body.writerIndex(), out.writtenBytes(), jmxOp);
+				sample(jmxOp, out.writtenBytes());
 				return body;
 			} finally {
 				if(kout!=null) try { kout.close(); } catch (Exception x) { /* No Op */ }

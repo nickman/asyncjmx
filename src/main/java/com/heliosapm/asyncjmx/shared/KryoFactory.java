@@ -143,7 +143,7 @@ import org.objenesis.strategy.StdInstantiatorStrategy;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Output;
-import com.esotericsoftware.kryo.serializers.CollectionSerializer;
+import com.heliosapm.asyncjmx.client.JMXOp;
 import com.heliosapm.asyncjmx.shared.serialization.ArrayTypeSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.AttributeSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.CompositeDataSupportSerializer;
@@ -313,6 +313,7 @@ public class KryoFactory {
 		kryo.register(Attribute.class, new AttributeSerializer());
 		kryo.register(MBeanServerNotification.class, new MBeanServerNotificationSerializer());
 		kryo.register(MBeanInfo.class, new MBeanInfoSerializer());
+		kryo.register(JMXOp.class, new JMXOp.JMXOpSerializer());
 		return kryo;
 	}
 	

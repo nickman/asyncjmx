@@ -3,12 +3,7 @@
  */
 package com.heliosapm.asyncjmx.client;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.EnumMap;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jboss.netty.channel.Channel;
@@ -21,6 +16,7 @@ import com.esotericsoftware.kryo.io.Output;
 import com.heliosapm.asyncjmx.server.serialization.JMXOpDecodeStep;
 import com.heliosapm.asyncjmx.server.serialization.JMXOpDecoder2;
 import com.heliosapm.asyncjmx.shared.JMXOpCode;
+import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 import com.heliosapm.asyncjmx.shared.serialization.BaseSerializer;
 import com.heliosapm.asyncjmx.unsafe.UnsafeAdapter;
 
@@ -162,6 +158,9 @@ public class JMXOp {
 	 * <p><b><code>com.heliosapm.asyncjmx.client.JMXOp.JMXOpSerializer</code></b>
 	 */
 	public static class JMXOpSerializer extends BaseSerializer<JMXOp> {
+		/** Static class logger */
+		protected static final JMXLogger log = JMXLogger.getLogger(JMXOpSerializer.class);
+		
 		/** A replay error instance */
 		protected static final Error REPLAY_ERROR;
 		
@@ -204,6 +203,10 @@ public class JMXOp {
 		}
 		
 
+		/**
+		 * {@inheritDoc}
+		 * @see com.heliosapm.asyncjmx.shared.serialization.BaseSerializer#doRead(com.esotericsoftware.kryo.Kryo, com.esotericsoftware.kryo.io.Input, java.lang.Class)
+		 */
 		@Override
 		protected JMXOp doRead(Kryo kryo, Input input, Class<JMXOp> type) {
 			if(replay==null) {
@@ -213,7 +216,12 @@ public class JMXOp {
 			}
 		}
 		
-		@SuppressWarnings("unchecked")
+		/**
+		 * @param kryo
+		 * @param input
+		 * @param type
+		 * @return
+		 */
 		protected JMXOp doReadWithReplay(Kryo kryo, Input input, Class<JMXOp> type) {
 			JMXOp state = (JMXOp)kryo.getContext().get("JMXOp");
 			if(state==null) {
@@ -221,13 +229,16 @@ public class JMXOp {
 				kryo.getContext().put("JMXOp", state);
 			}
 			try {
+				log.info("Readable Bytes: [%s]", replay.getBuff().readableBytes());
 				switch(replay.getState()) {
 					case REQUESTID:					
 						state.opSeq = input.readInt();
 						replay.checkpoint(JMXOpDecodeStep.OPCODE);					
+					//$FALL-THROUGH$
 					case OPCODE:
 						state.jmxOpCode = JMXOpCode.decode(input.readByte());
 						replay.checkpoint(JMXOpDecodeStep.ARGCOUNT);
+					//$FALL-THROUGH$
 					case ARGCOUNT:
 						int argCount = input.readInt();
 						state.opArguments = new Object[argCount];
@@ -237,6 +248,7 @@ public class JMXOp {
 							return state;
 						}
 						replay.checkpoint(JMXOpDecodeStep.ARGS);
+					//$FALL-THROUGH$
 					case ARGS:
 						while(state.argsRead < state.opArguments.length) {
 							state.opArguments[state.argsRead] = kryo.readClassAndObject(input);
@@ -265,6 +277,12 @@ public class JMXOp {
 			}
 		}
 		
+		/**
+		 * @param kryo
+		 * @param input
+		 * @param type
+		 * @return
+		 */
 		protected JMXOp doReadNoReplay(Kryo kryo, Input input, Class<JMXOp> type) {			
 			int opSeq = input.readInt();
 			JMXOpCode opCode = JMXOpCode.decode(input.readByte());
