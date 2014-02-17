@@ -71,7 +71,7 @@ public class JMXOpDecoder2 extends ReplayingDecoder<JMXOpDecodeStep> {
 		}
 		
 		int readableBytesAvailable = super.actualReadableBytes();
-//		log.info("PRE: Replay Bytes Available: [%s], Input Available: [%s]",readableBytesAvailable, input.available());
+		log.info("PRE: Replay Bytes Available: [%s]",readableBytesAvailable);
 		buff.writeBytes(buffer, readableBytesAvailable);
 		input = new UnsafeInput(new ChannelBufferInputStream(buff));
 		log.info("POST: Buff Bytes Available: [%s], Input Available: [%s]",buff.readableBytes(), input.available());

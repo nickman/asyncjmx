@@ -48,7 +48,8 @@ import org.jboss.netty.channel.ExceptionEvent;
 import org.jboss.netty.channel.MessageEvent;
 import org.jboss.netty.channel.SimpleChannelHandler;
 
-import com.heliosapm.asyncjmx.server.JMXOpInvocation.DynamicTypedIterator;
+import com.heliosapm.asyncjmx.client.JMXOp;
+import com.heliosapm.asyncjmx.client.JMXOp.DynamicTypedIterator;
 import com.heliosapm.asyncjmx.shared.JMXResponseType;
 import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 import com.heliosapm.asyncjmx.shared.serialization.VoidResult;
@@ -134,13 +135,13 @@ public class JMXMBeanServerInvocationHandler extends SimpleChannelHandler {
 	@Override
 	public void messageReceived(ChannelHandlerContext ctx, MessageEvent e) throws Exception {
 		final Object msg = e.getMessage();
-		if(msg instanceof JMXOpInvocation) {
+		if(msg instanceof JMXOp) {
 			final Channel channel = e.getChannel();
-			JMXOpInvocation op = (JMXOpInvocation)msg;
+			JMXOp op = (JMXOp)msg;
 			Object response = invoke(op);
-			log.info("[%s] request result: type:[%s], value:[%s]", op.opCode, response.getClass().getName(), response);
+			log.info("[%s] request result: type:[%s], value:[%s]", op.getJmxOpCode(), response.getClass().getName(), response);
 			//sendResponseHeader(ctx, e.getRemoteAddress(), op.opCode, op.requestId);
-			writeRequested(ctx, new DownstreamMessageEvent(channel, Channels.future(channel), new Object[]{JMXResponseType.JMX_RESPONSE.opCode, op.opCode, op.requestId, response}, e.getRemoteAddress()));
+			writeRequested(ctx, new DownstreamMessageEvent(channel, Channels.future(channel), new Object[]{JMXResponseType.JMX_RESPONSE.opCode, op.getJmxOpCode(), op.getOpSeq(), response}, e.getRemoteAddress()));
 		} else {
 			super.messageReceived(ctx, e);
 		}
@@ -169,13 +170,13 @@ public class JMXMBeanServerInvocationHandler extends SimpleChannelHandler {
 	 * @param opInvocation The invocation to execute
 	 * @return the result of the invocation
 	 */
-	protected <T> Object invoke(JMXOpInvocation opInvocation)  {
+	protected <T> Object invoke(JMXOp opInvocation)  {
 		String id = opInvocation.getJmxDomain();
 		final MBeanServerConnection mbeanServer = knownMBeanServers.get(id);
 		if(mbeanServer==null) return new IOException("Failed to locate MBeanServer with id [" + id + "]");
 		DynamicTypedIterator argIter =  opInvocation.getArgumentIterator();
 		try {
-			switch(opInvocation.opCode) {
+			switch(opInvocation.getJmxOpCode()) {
 			case ADDNOTIFICATIONLISTENER_ONNO:
 				mbeanServer.addNotificationListener(argIter.next(ObjectName.class), argIter.next(NotificationListener.class), argIter.next(NotificationFilter.class), argIter.next(Object.class));
 				return VoidResult.Instance;

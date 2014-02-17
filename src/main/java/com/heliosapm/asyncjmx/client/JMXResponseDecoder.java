@@ -114,7 +114,7 @@ public class JMXResponseDecoder extends KryoReplayingDecoder<JMXResponseDecodeSt
 					log.info("Decoding Response for [%s] with No Ser", opCode);
 					response = kryoRead(channel, buffer, responseSize);
 				}
-				log.info("Returning new JMXOpResponse");
+				log.info("Returning new JMXOpResponse Op:[%s] Id:[%s]", opCode, requestId);
 				//try { buffer.discardReadBytes(); } catch (Exception x) { /* No Op */ }
 				checkpoint(JMXResponseDecodeStep.TYPECODE);
 				return new JMXOpResponse(opCode, requestId, response);

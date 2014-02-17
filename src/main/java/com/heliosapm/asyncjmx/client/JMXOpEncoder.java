@@ -104,7 +104,7 @@ public class JMXOpEncoder extends OneToOneEncoder {
 	 */
 	protected int estimateSize(JMXOp op) {
 		ConcurrentLongSlidingWindow csw = getJMXOpHistogram(op.getJmxOpCode());
-		if(csw.size() < 2) return DEFAULT_SIZE;
+		if(csw.size() < 3) return DEFAULT_SIZE;
 		return (int)csw.percentile(DEFAULT_HISTOGRAM_PERCENTILE);
 	}
 	
@@ -122,18 +122,21 @@ public class JMXOpEncoder extends OneToOneEncoder {
 			ChannelBufferOutputStream out = null;
 			try {
 				ChannelBuffer body = ChannelBuffers.dynamicBuffer(estimateSize(jmxOp), bufferFactory);
-				body.setInt(0, 0);
+				body.writeInt(0);
 				out = new ChannelBufferOutputStream(body);			
 				Kryo kryo = KryoFactory.getInstance().getKryo(channel);			
 				kout = new UnsafeOutput(out);
 				kryo.writeObject(kout, jmxOp);
-				body.setInt(0, body.writerIndex());
 				kout.flush();
-				out.flush();		
-				
-				log.info("Sending Encoded Op with [%s] bytes.  Total Payload: [%s].  Op: %s", body.writerIndex(), out.writtenBytes(), jmxOp);
-				sample(jmxOp, out.writtenBytes());
+				int payloadSize = body.writerIndex() - 4;
+				body.setInt(0, payloadSize);
+				out.flush();						
+				log.info("Sending Encoded Op with [%s] bytes.  Total Payload: [%s].  Op: %s", payloadSize, body.writerIndex(), jmxOp);
+				sample(jmxOp, body.writerIndex());
 				return body;
+			} catch (Exception ex) {
+				log.error("JMXOpEncoder failure", ex);
+				throw ex;
 			} finally {
 				if(kout!=null) try { kout.close(); } catch (Exception x) { /* No Op */ }
 				if(out!=null) try { out.close(); } catch (Exception x) { /* No Op */ }

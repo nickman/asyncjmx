@@ -55,6 +55,7 @@ import org.jboss.netty.logging.InternalLoggerFactory;
 import org.jboss.netty.logging.JdkLoggerFactory;
 
 import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
+import com.heliosapm.asyncjmx.unsafe.UnsafeAdapter;
 
 /**
  * <p>Title: AsyncJMXClient</p>
@@ -108,7 +109,7 @@ public class AsyncJMXClient implements ChannelUpstreamHandler {
 	public MBeanServerConnection connectMBeanServerConnection(String host, int port, boolean async) {
 		Channel channel = clientBootstrap.connect(new InetSocketAddress(host, port)).awaitUninterruptibly().getChannel();
 		if(!async) {
-			return new SyncMBeanServerConnection(channel, 150000);
+			return new SyncMBeanServerConnection(channel, 300000);
 		}
 		throw new RuntimeException("No async yet");
 		
@@ -119,37 +120,57 @@ public class AsyncJMXClient implements ChannelUpstreamHandler {
 		try {
 			MBeanServerConnection conn = client.connectMBeanServerConnection("localhost", 9061, false);
 			System.out.println("DefaultDomain:" + conn.getDefaultDomain());
-			MBeanInfo minfo = conn.getMBeanInfo(new ObjectName("java.lang:name=PS MarkSweep,type=GarbageCollector"));
-			System.out.println("Minfo:\n" + minfo);
+			ObjectName obn = null;			
+			obn = new ObjectName("java.lang:name=PS Eden Space,type=MemoryPool");
+			System.out.println("REQUESTING Minfo:[" + obn + "]");
+			MBeanInfo minfo = conn.getMBeanInfo(obn);
+			System.out.println("Minfo:[" + obn + "]\n" + minfo);
+			obn = new ObjectName("java.lang:type=Memory");
+			System.out.println("REQUESTING Minfo:[" + obn + "]");
+			minfo = conn.getMBeanInfo(obn);
+			System.out.println("Minfo:[" + obn + "]\n" + minfo);			
+			obn = new ObjectName("java.lang:name=PS MarkSweep,type=GarbageCollector");
+			System.out.println("REQUESTING Minfo:[" + obn + "]");
+			minfo = conn.getMBeanInfo(obn);
+			System.out.println("Minfo:[" + obn + "]\n" + minfo);
+			
+			if(minfo==null) return;
 			
 			
-//			Set<ObjectName> objectNames = conn.queryNames(null, null);
-//			if(objectNames!=null) {
-//				System.out.println("ObjectNames:" + objectNames.size());
-//				for(Object on: objectNames) {
-//					System.out.println("\t" + on);
-//				}
-//			} else {
-//				System.out.println("QueryNames Failed");
-//			}
-//			Set<ObjectInstance> objectInstances = conn.queryMBeans(null, null);
-//			if(objectInstances!=null) {
-//				System.out.println("ObjectInstances:" + objectInstances.size());
-//				for(Object on: objectInstances) {
-//					System.out.println("\t" + on);
-//				}
-//			} else {
-//				System.out.println("QueryMBeans Failed");
-//			}
-//			for(ObjectName on: conn.queryNames(null, null)) {
-//				minfo = conn.getMBeanInfo(on);
-//				Set<String> attrNames = new HashSet<String>();
-//				for(MBeanAttributeInfo ma: minfo.getAttributes()) {
-//					attrNames.add(ma.getName());
-//				}
-//				conn.getAttributes(on, attrNames.toArray(new String[attrNames.size()]));
-//			}
-//			
+			Set<ObjectName> objectNames = conn.queryNames(null, null);
+			if(objectNames!=null) {
+				System.out.println("ObjectNames:" + objectNames.size());
+				for(Object on: objectNames) {
+					System.out.println("\t" + on);
+				}
+			} else {
+				System.out.println("QueryNames Failed");
+			}
+			Set<ObjectInstance> objectInstances = conn.queryMBeans(null, null);
+			if(objectInstances!=null) {
+				System.out.println("ObjectInstances:" + objectInstances.size());
+				for(Object on: objectInstances) {
+					System.out.println("\t" + on);
+				}
+			} else {
+				System.out.println("QueryMBeans Failed");
+			}
+			for(ObjectName on: conn.queryNames(null, null)) {
+				System.out.println("Sending GETMBEANINFO for [" + on + "]");
+				minfo = conn.getMBeanInfo(on);
+				System.out.println("Got GETMBEANINFO for [" + on + "]--->" + minfo);
+				Set<String> attrNames = new HashSet<String>();
+				try {
+					
+					for(MBeanAttributeInfo ma: minfo.getAttributes()) {
+						attrNames.add(ma.getName());
+					}
+				} catch (Exception ex) {
+					UnsafeAdapter.throwException(ex);
+				}
+				conn.getAttributes(on, attrNames.toArray(new String[attrNames.size()]));
+			}
+			System.out.println("\n\t========================================\n\tCOMPLETE\n\t========================================\n");
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);
 		} finally {

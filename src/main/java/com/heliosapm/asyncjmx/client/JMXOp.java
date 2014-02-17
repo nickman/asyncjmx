@@ -4,6 +4,7 @@
 package com.heliosapm.asyncjmx.client;
 
 import java.util.Arrays;
+import java.util.NoSuchElementException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jboss.netty.channel.Channel;
@@ -13,11 +14,13 @@ import com.esotericsoftware.kryo.DefaultSerializer;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.heliosapm.asyncjmx.server.JMXOpInvocation.DynamicTypedIterator;
 import com.heliosapm.asyncjmx.server.serialization.JMXOpDecodeStep;
 import com.heliosapm.asyncjmx.server.serialization.JMXOpDecoder2;
 import com.heliosapm.asyncjmx.shared.JMXOpCode;
 import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 import com.heliosapm.asyncjmx.shared.serialization.BaseSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.PlaceHolder;
 import com.heliosapm.asyncjmx.unsafe.UnsafeAdapter;
 
 /**
@@ -35,6 +38,8 @@ public class JMXOp {
 	private JMXOpCode jmxOpCode;
 	/** The JMX Op arguments */
 	private Object[] opArguments;
+	/** The JMX Server Domain override */
+	private String jmxDomain = null;
 	
 	/** The number of arguments read so far */
 	private transient int argsRead = 0; 
@@ -114,6 +119,14 @@ public class JMXOp {
 		return opSeq;
 	}
 	
+	/**
+	 * Returns the JMX Server Domain override 
+	 * @return the jmxDomain
+	 */
+	public String getJmxDomain() {
+		return jmxDomain==null ? "DefaultDomain" : jmxDomain;
+	}
+	
 	
 	
 	/**
@@ -133,6 +146,11 @@ public class JMXOp {
 		builder.append(opSeq);
 		builder.append("],");
 		
+		builder.append("jmxDomain [");
+		builder.append(getJmxDomain());
+		builder.append("],");
+		
+		
 		if (jmxOpCode != null) {
 			builder.append("jmxOpCode [");
 			builder.append(jmxOpCode.name());
@@ -148,6 +166,45 @@ public class JMXOp {
 	}
 
 
+	/**
+	 * Returns a typed iterator for the supplied arguments
+	 * @return a typed iterator for the supplied arguments
+	 */
+	public DynamicTypedIterator getArgumentIterator() {
+		return new DynamicTypedIterator();
+	}
+	
+	/**
+	 * <p>Title: DynamicTypedIterator</p>
+	 * <p>Description: A typed iterator over the JMXOp's argument array</p> 
+	 * <p>Company: Helios Development Group LLC</p>
+	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
+	 * <p><code>com.heliosapm.asyncjmx.client.JMXOp.DynamicTypedIterator</code></p>
+	 */
+	public class DynamicTypedIterator {
+		int index = 0;
+		final int argCnt = opArguments.length;
+
+		public boolean hasNext() {
+			return index < argCnt;
+		}
+		
+		public <T> T next(Class<T> type) throws NoSuchElementException, IllegalStateException {
+			if(index >= argCnt) {
+				throw new NoSuchElementException();
+			}
+			try {
+				Object o = opArguments[index];
+				if(o!=null && o instanceof PlaceHolder) {
+					return null;
+				}
+				return (T)opArguments[index];
+			} finally {
+				index++;
+			}
+		}
+	}
+	
 
 
 	/**
@@ -240,7 +297,7 @@ public class JMXOp {
 						replay.checkpoint(JMXOpDecodeStep.ARGCOUNT);
 					//$FALL-THROUGH$
 					case ARGCOUNT:
-						int argCount = input.readInt();
+						byte argCount = input.readByte();
 						state.opArguments = new Object[argCount];
 						if(argCount==0) {
 							kryo.getContext().remove("JMXOp");
@@ -295,6 +352,9 @@ public class JMXOp {
 		}
 		
 	}
-	
+
+
+
+
 	
 }

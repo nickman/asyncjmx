@@ -25,6 +25,7 @@
 package com.heliosapm.asyncjmx.client;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Set;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.TimeUnit;
@@ -120,7 +121,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 		channel.write(op).addListener(new ChannelFutureListener() {
 			@Override
 			public void operationComplete(ChannelFuture future) throws Exception {
-				log.info("Write for op [%s] complete", op.getJmxOpCode().name());
+				log.info("Write for op [%s]--[%s]--[%s] complete", op.getJmxOpCode().name(), op.getOpSeq(), Arrays.toString(op.getOpArguments()));
 			}
 		});
 		Object retValue = null;

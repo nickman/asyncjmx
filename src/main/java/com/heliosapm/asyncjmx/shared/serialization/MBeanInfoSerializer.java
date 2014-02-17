@@ -23,7 +23,7 @@ import com.esotericsoftware.kryo.io.Output;
  * <p><b><code>com.heliosapm.asyncjmx.shared.serialization.MBeanInfoSerializer</code></b>
  */
 
-public class MBeanInfoSerializer extends Serializer<MBeanInfo> {
+public class MBeanInfoSerializer extends BaseSerializer<MBeanInfo> {
 	protected static final MBeanAttributeInfoSerializer maiSer = new MBeanAttributeInfoSerializer();
 	protected static final MBeanConstructorInfoSerializer mciSer = new MBeanConstructorInfoSerializer();
 	protected static final MBeanOperationInfoSerializer moiSer = new MBeanOperationInfoSerializer();
@@ -31,7 +31,8 @@ public class MBeanInfoSerializer extends Serializer<MBeanInfo> {
 	protected static final MBeanParameterInfoSerializer mpiSer = new MBeanParameterInfoSerializer();
 	
 	@Override
-	public void write(Kryo kryo, Output output, MBeanInfo mi) {
+	protected void doWrite(Kryo kryo, Output output, MBeanInfo mi) {
+		log.info("Writing MBeanInfo for class type [%s] desc [%s]", mi.getClassName(), mi.getDescription());
 		output.writeString(mi.getClassName());
 		output.writeString(mi.getDescription());
 		
@@ -50,10 +51,11 @@ public class MBeanInfoSerializer extends Serializer<MBeanInfo> {
 		for(MBeanOperationInfo moi: operations) moiSer.write(kryo, output, moi);		
 		for(MBeanNotificationInfo mni: notifications) mniSer.write(kryo, output, mni);
 		
+		log.info("Wrote MBeanInfo for class type [%s] desc [%s]", mi.getClassName(), mi.getDescription());
 	}
 
 	@Override
-	public MBeanInfo read(Kryo kryo, Input input, Class<MBeanInfo> type) {
+	protected MBeanInfo doRead(Kryo kryo, Input input, Class<MBeanInfo> type) {
 		String className = input.readString();
 		String description = input.readString();
 		MBeanAttributeInfo[] attributes = new MBeanAttributeInfo[input.readInt()]; 
@@ -73,7 +75,7 @@ public class MBeanInfoSerializer extends Serializer<MBeanInfo> {
 		for(int i = 0; i < notifications.length; i++) {
 			notifications[i] = mniSer.read(kryo, input, MBeanNotificationInfo.class);
 		}
-
+		log.info("Returning MBeanInfo for class type [%s] desc [%s]", className, description);
 		return new MBeanInfo(className, description, attributes, constructors, operations, notifications);
 	}
 

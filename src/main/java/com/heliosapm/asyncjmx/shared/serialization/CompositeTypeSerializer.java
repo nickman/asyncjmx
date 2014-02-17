@@ -45,7 +45,7 @@ import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 public class CompositeTypeSerializer extends Serializer<CompositeType> {
 	/** Instance logger */
 	protected final JMXLogger log = JMXLogger.getLogger(getClass());
-	protected static final OpenTypeSerializer otSerialzier = new OpenTypeSerializer();
+
 	@Override
 	public void write(Kryo kryo, Output output, CompositeType cType) {
 		// String typeName, String description, String[] itemNames, String[] itemDescriptions, OpenType<?>[] itemTypes
