@@ -24,23 +24,33 @@
  */
 package com.heliosapm.asyncjmx.client;
 
+import org.jboss.netty.buffer.ChannelBuffer;
+
+import com.esotericsoftware.kryo.DefaultSerializer;
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 import com.heliosapm.asyncjmx.shared.JMXOpCode;
+import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
+import com.heliosapm.asyncjmx.shared.serialization.BaseSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.HistogramKeyProvider;
+import com.heliosapm.asyncjmx.unsafe.UnsafeAdapter;
 
 /**
  * <p>Title: JMXOpResponse</p>
- * <p>Description: </p> 
+ * <p>Description: Wrapper for JMX Op responses</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>com.heliosapm.asyncjmx.client.JMXOpResponse</code></p>
  */
-
-public class JMXOpResponse {
+@DefaultSerializer(JMXOpResponse.JMXOpResponseSerializer.class)
+public class JMXOpResponse implements HistogramKeyProvider<Class<?>> {
 	/** The JMXOpCode of the original request */
-	protected final JMXOpCode opCode;	
+	protected JMXOpCode opCode;	
 	/** The request id of the original request */
-	protected final int requestId;
+	protected int requestId;
 	/** The JMX Op response */
-	protected final Object response;
+	protected Object response;
 	
 	/**
 	 * Creates a new JMXOpResponse
@@ -53,6 +63,13 @@ public class JMXOpResponse {
 		this.opCode = opCode;
 		this.requestId = requestId;
 		this.response = response;
+	}
+	
+	/**
+	 * Creates a new JMXOpResponse
+	 */
+	private JMXOpResponse() {
+		
 	}
 
 	/**
@@ -78,6 +95,25 @@ public class JMXOpResponse {
 	public Object getResponse() {
 		return response;
 	}
+	
+
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.asyncjmx.shared.serialization.HistogramKeyProvider#getHistogramKey()
+	 */
+	@Override
+	public Class<?> getHistogramKey() {
+		return response==null ? null : response.getClass();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.asyncjmx.shared.serialization.HistogramKeyProvider#getVoidHistogramSize()
+	 */
+	@Override
+	public int getVoidHistogramSize() {
+		return 10;
+	}	
 
 	/**
 	 * {@inheritDoc}
@@ -144,6 +180,169 @@ public class JMXOpResponse {
 	}
 	
 	
+	/**
+	 * <p>Title: JMXOpResponseSerializer</p>
+	 * <p>Description: The Kryo serializer for {@link JMXOpResponse} instances</p> 
+	 * <p>Company: Helios Development Group LLC</p>
+	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
+	 * <p><code>com.heliosapm.asyncjmx.client.JMXOpResponse.JMXOpResponseSerializer</code></p>
+	 */
+	public static class JMXOpResponseSerializer extends BaseSerializer<JMXOpResponse> {
+		/** Static class logger */
+		protected static final JMXLogger log = JMXLogger.getLogger(JMXOpResponseSerializer.class);
+		
+		/** A replay error instance */
+		protected static final Error REPLAY_ERROR;
+		
+		static {
+			try {
+				Class<Error> clazz = (Class<Error>) Class.forName("org.jboss.netty.handler.codec.replay.ReplayError");			
+				REPLAY_ERROR = (Error)UnsafeAdapter.allocateInstance(clazz);
+			} catch (Exception ex) {
+				throw new RuntimeException("Failed to initialize replay error", ex);
+			}
+		}
+		
+		/** The parent replaying decoder */
+		private final JMXResponseDecoder replay;
+		
+		/**
+		 * Creates a new JMXResponseDecoder with a reference to the currently running replaying decoder
+		 * @param replay The replaying decoder to callback on as a step is complete
+		 */
+		public JMXOpResponseSerializer(JMXResponseDecoder replay) {
+			super();
+			this.replay = replay;
+		}
+		
+		/**
+		 * Creates a new JMXOpResponseSerializer 
+		 */
+		public JMXOpResponseSerializer() {
+			this.replay = null;
+		}
+
+		
+		/**
+		 * {@inheritDoc}
+		 * @see com.heliosapm.asyncjmx.shared.serialization.BaseSerializer#doWrite(com.esotericsoftware.kryo.Kryo, com.esotericsoftware.kryo.io.Output, java.lang.Object)
+		 */
+		@Override
+		protected void doWrite(Kryo kryo, Output output, JMXOpResponse jmxOpResp) {
+			output.writeByte(jmxOpResp.opCode.opCode);
+			output.writeInt(jmxOpResp.requestId);
+			kryo.writeClassAndObject(output, jmxOpResp.response);
+		}
+		
+		
+		/**
+		 * {@inheritDoc}
+		 * @see com.heliosapm.asyncjmx.shared.serialization.BaseSerializer#doRead(com.esotericsoftware.kryo.Kryo, com.esotericsoftware.kryo.io.Input, java.lang.Class)
+		 */
+		@Override
+		protected JMXOpResponse doRead(Kryo kryo, Input input, Class<JMXOpResponse> type) {
+			if(replay==null) {
+				return doReadWithNoReplay(kryo, input, type);
+			}
+			return doReadWithReplay(kryo, input, type);
+		}
+		
+		/**
+		 * Reads a JMXOpResponse without a parent replaying decoder
+		 * @param kryo The kryo instance
+		 * @param input THe kryo input stream
+		 * @param type The decoding type
+		 * @return the read JMXOpResponse
+		 */
+		protected JMXOpResponse doReadWithNoReplay(Kryo kryo, Input input, Class<JMXOpResponse> type) {
+			JMXOpResponse jmxOpResp = new JMXOpResponse();
+			jmxOpResp.opCode = JMXOpCode.decode(input.readByte());
+			jmxOpResp.requestId = input.readInt();
+			jmxOpResp.response = kryo.readClassAndObject(input);
+			return jmxOpResp;
+		}
+		
+		/**
+		 * Reads a JMXOpResponse with the parent replaying decoder
+		 * @param kryo The kryo instance
+		 * @param input THe kryo input stream
+		 * @param type The decoding type
+		 * @return the read JMXOpResponse
+		 */
+		protected JMXOpResponse doReadWithReplay(Kryo kryo, Input input, Class<JMXOpResponse> type) {
+			JMXOpResponse state = (JMXOpResponse)kryo.getContext().get("JMXOpResponse");
+			if(state==null) {
+				state = new JMXOpResponse();
+				kryo.getContext().put("JMXOpResponse", state);
+			}
+			try {
+				ChannelBuffer intern = replay.internalBuffer();
+				log.info("Readable Bytes: [%s], Index: [%s]", intern.readableBytes(), intern.readerIndex());
+				switch(replay.getState()) {
+					case REQUESTID:
+						state.response = input.readInt();
+						replay.checkpoint(JMXResponseDecodeStep.OPCODE);
+						//$FALL-THROUGH$
+					case OPCODE:
+						state.opCode = JMXOpCode.decode(input.readByte());
+						replay.checkpoint(JMXResponseDecodeStep.RESPONSE);
+						//$FALL-THROUGH$						
+					case RESPONSE:
+						state.response = kryo.readClassAndObject(input);
+						replay.checkpoint(JMXResponseDecodeStep.BYTESIZE);
+						kryo.getContext().remove("JMXOpResponse");
+						//$FALL-THROUGH$
+						return state;
+					default:
+						throw new Error("Should not reach here");
+				}
+			} catch (Throwable ex) {				
+				throw REPLAY_ERROR;
+			}
+		}		
+	}
 	
+//	protected JMXOpResponse doReadWithReplay(Kryo kryo, Input input, Class<JMXOpResponse> type) {
+//		JMXOpResponse state = (JMXOpResponse)kryo.getContext().get("JMXOpResponse");
+//		if(state==null) {
+//			state = new JMXOpResponse();
+//			kryo.getContext().put("JMXOpResponse", state);
+//		}
+//		int readerIndex = 0;
+//		try {
+//			readerIndex = replay.getBuff().readerIndex(); 
+//			log.info("Readable Bytes: [%s], Index: [%s]", replay.getBuff().readableBytes(), readerIndex);
+//			switch(replay.getState()) {
+//				case REQUESTID:
+//					readerIndex = replay.getBuff().readerIndex(); 						
+//					log.info("Buff reset to [%s], Readable:[%s], Buff:[%s]", readerIndex, replay.getBuff().readableBytes(), replay.getBuff());						
+//					state.response = input.readInt();
+//					replay.checkpoint(JMXResponseDecodeStep.OPCODE);
+//					//$FALL-THROUGH$
+//				case OPCODE:
+//					readerIndex = replay.getBuff().readerIndex(); 						
+//					log.info("Buff reset to [%s], Readable:[%s], Buff:[%s]", readerIndex, replay.getBuff().readableBytes(), replay.getBuff());						
+//					state.opCode = JMXOpCode.decode(input.readByte());
+//					replay.checkpoint(JMXResponseDecodeStep.RESPONSE);
+//					//$FALL-THROUGH$						
+//				case RESPONSE:
+//					readerIndex = replay.getBuff().readerIndex(); 						
+//					log.info("Buff reset to [%s], Readable:[%s], Buff:[%s]", readerIndex, replay.getBuff().readableBytes(), replay.getBuff());						
+//					state.response = kryo.readClassAndObject(input);
+//					replay.checkpoint(JMXResponseDecodeStep.BYTESIZE);
+//					kryo.getContext().remove("JMXOpResponse");
+//					//$FALL-THROUGH$
+//					return state;
+//				default:
+//					throw new Error("Should not reach here");
+//			}
+//		} catch (Throwable ex) {				
+//			replay.getBuff().readerIndex(readerIndex);
+//			log.warn("Kryo decode failed:[%s], Decoding Buffer Reset:[%s](%s)", ex.toString(), replay.getBuff().readableBytes(), replay.getBuff().toString());
+//			throw REPLAY_ERROR;
+//		}
+//	}		
+//}
 	
+
 }

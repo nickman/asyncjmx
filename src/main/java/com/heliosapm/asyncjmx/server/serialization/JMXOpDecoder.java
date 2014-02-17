@@ -1,114 +1,111 @@
 /**
- * Helios, OpenSource Monitoring
- * Brought to you by the Helios Development Group
- *
- * Copyright 2007, Helios Development Group and individual contributors
- * as indicated by the @author tags. See the copyright.txt file in the
- * distribution for a full listing of individual contributors.
- *
- * This is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as
- * published by the Free Software Foundation; either version 2.1 of
- * the License, or (at your option) any later version.
- *
- * This software is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this software; if not, write to the Free
- * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
- *
+ * 
  */
 package com.heliosapm.asyncjmx.server.serialization;
 
 import org.jboss.netty.buffer.ChannelBuffer;
+import org.jboss.netty.buffer.ChannelBufferFactory;
 import org.jboss.netty.buffer.ChannelBufferInputStream;
+import org.jboss.netty.buffer.DirectChannelBufferFactory;
+import org.jboss.netty.buffer.HeapChannelBufferFactory;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelHandlerContext;
+import org.jboss.netty.handler.codec.replay.ReplayingDecoder;
 
+import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.UnsafeInput;
-import com.heliosapm.asyncjmx.client.JMXOp;
-import com.heliosapm.asyncjmx.server.JMXOpInvocation;
-import com.heliosapm.asyncjmx.shared.serialization.KryoReplayingDecoder;
+import com.heliosapm.asyncjmx.shared.JMXOp;
+import com.heliosapm.asyncjmx.shared.KryoFactory;
+import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
+import com.heliosapm.asyncjmx.shared.util.ConfigurationHelper;
+
+
 
 /**
  * <p>Title: JMXOpDecoder</p>
- * <p>Description: The JMX Op Decoder</p> 
+ * <p>Description:   </p>
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.asyncjmx.server.serialization.JMXOpDecoder</code></p>
+ * <p><b><code>com.heliosapm.asyncjmx.server.serialization.JMXOpDecoder</code></b>
  */
 
-public class JMXOpDecoder extends  KryoReplayingDecoder<JMXOpDecodeStep> {
-
+public class JMXOpDecoder extends ReplayingDecoder<JMXOpDecodeStep> {
+	/** The channel buffer factory for decoding JMXOp buffers */
+	protected static final ChannelBufferFactory bufferFactory;
+	
+	static {
+		boolean directBuffer = ConfigurationHelper.getBooleanSystemThenEnvProperty("com.heliosapm.asyncjmx.server.buffers.direct", false);
+		if(directBuffer) {
+			bufferFactory = new DirectChannelBufferFactory();
+		} else {
+			bufferFactory = new HeapChannelBufferFactory();
+		}
+	}
+	/** Instance logger */
+	protected final JMXLogger log = JMXLogger.getLogger(getClass());
+	/** The JMXOp kryo replaying deserializer */
+	protected JMXOp.JMXOpSerializer ser = new JMXOp.JMXOpSerializer(this);
+	/** The kryo input */
+	protected Input input = null;
+	/** The payload size allocated channel buffer */
+	protected ChannelBuffer buff = null;
+	/** The number of bytes read from the replay buffer */
+	protected int replayBytesRead = 0;
+	/** The payload size of the currently processing decode */
+	int payloadSize = -1;
+	
 	/**
 	 * Creates a new JMXOpDecoder
 	 */
 	public JMXOpDecoder() {
-		super(JMXOpDecodeStep.OPCODE);
+		super(JMXOpDecodeStep.BYTESIZE);
 	}
 	
-	
-	/** The op invocation being decoded */
-	protected JMXOpInvocation opInvocation = null;
-
-	/** The JMXOp invocation being decoded */
-	protected JMXOp jmxOp = null;
-
-	
-	/** The chanel buffer's input stream */
-	protected ChannelBufferInputStream is = null;
-	/** The kryo input associated to the channel buffer input stream */
-	protected UnsafeInput input = null;
-	
-	/** The caller sent response size */
-	protected int responseSize = -1;
 	
 	@Override
 	protected Object decode(ChannelHandlerContext ctx, Channel channel, ChannelBuffer buffer, JMXOpDecodeStep state) throws Exception {
-//		header.writeByte(opCode);  // 1  byte for op code
-//		header.writeInt((Integer)payload[1]); // 4 bytes for request id
-//		final int sizeOffset = header.writerIndex();
-//		header.writeInt(0);	// 4 byte for args indicator
 		
-		switch(state) {
-			case OPCODE:				
-				opInvocation = new JMXOpInvocation(buffer.readByte());
-				log.info("Read JMXOp [%s]", opInvocation.opCode);
-				checkpoint(JMXOpDecodeStep.REQUESTID);
-			//$FALL-THROUGH$
-			case REQUESTID:
-				opInvocation.setRequestId(buffer.readInt());
-				log.info("Read RequestID [%s]", opInvocation.getRequestId());
-				if(opInvocation.hasMoreArgs()) {
-					checkpoint(JMXOpDecodeStep.ARGS);
-				} else {
-					checkpoint(JMXOpDecodeStep.OPCODE);
-					return opInvocation;
-				}
-			//$FALL-THROUGH$
-//			case ARGBYTESIZE:
-//				responseSize = buffer.readInt();
-//				log.info("Read Arg Size [%s]", responseSize);
-//				if(responseSize==0) {
-//					checkpoint(JMXOpDecodeStep.OPCODE);
-//					return opInvocation;
-//				}
-//				checkpoint(JMXOpDecodeStep.ARGS);
-//			//$FALL-THROUGH$
-			case ARGS:
-				checkpoint(JMXOpDecodeStep.ARGS);
-				kryoRead(channel, buffer, opInvocation);
-				checkpoint(JMXOpDecodeStep.OPCODE);
-				return opInvocation;
-			default:
-				throw new Error("Shouldn't reach here.");
-		
+		if(state==JMXOpDecodeStep.BYTESIZE) {
+			payloadSize = buffer.readInt();
+			log.info("JMXOp Decode Starting. Payload Size: [%s] bytes", payloadSize);
+			checkpoint(JMXOpDecodeStep.REQUESTID);
+			replayBytesRead += 4;
+			buff = bufferFactory.getBuffer(payloadSize);						
 		}
+		
+		int readableBytesAvailable = super.actualReadableBytes();
+		log.info("PRE: Payload Size: [%s], Replay Bytes Available: [%s]", payloadSize, readableBytesAvailable);
+		buff.writeBytes(buffer, Math.min(readableBytesAvailable, payloadSize));
+		input = new UnsafeInput(new ChannelBufferInputStream(buff));
+		log.info("POST: Buff Bytes Available: [%s], Input Available: [%s]",buff.readableBytes(), input.available());
+		return ser.read(KryoFactory.getInstance().getKryo(channel), input, JMXOp.class);
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see org.jboss.netty.handler.codec.replay.ReplayingDecoder#getState()
+	 */
+	@Override
+	public JMXOpDecodeStep getState() {
+		return super.getState();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see org.jboss.netty.handler.codec.replay.ReplayingDecoder#checkpoint(java.lang.Enum)
+	 */
+	@Override
+	public void checkpoint(JMXOpDecodeStep state) {
+		super.checkpoint(state);
 	}
 
+
+	/**
+	 * Returns the replaying decoder's managed buffer
+	 * @return the replaying decoder's managed buffer
+	 */
+	public ChannelBuffer getBuff() {
+		return buff;
+	}
 
 }

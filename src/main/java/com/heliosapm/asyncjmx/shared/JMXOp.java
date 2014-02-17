@@ -1,7 +1,7 @@
 /**
  * 
  */
-package com.heliosapm.asyncjmx.client;
+package com.heliosapm.asyncjmx.shared;
 
 import java.util.Arrays;
 import java.util.NoSuchElementException;
@@ -14,12 +14,11 @@ import com.esotericsoftware.kryo.DefaultSerializer;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import com.heliosapm.asyncjmx.server.JMXOpInvocation.DynamicTypedIterator;
 import com.heliosapm.asyncjmx.server.serialization.JMXOpDecodeStep;
-import com.heliosapm.asyncjmx.server.serialization.JMXOpDecoder2;
-import com.heliosapm.asyncjmx.shared.JMXOpCode;
+import com.heliosapm.asyncjmx.server.serialization.JMXOpDecoder;
 import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 import com.heliosapm.asyncjmx.shared.serialization.BaseSerializer;
+import com.heliosapm.asyncjmx.shared.serialization.HistogramKeyProvider;
 import com.heliosapm.asyncjmx.shared.serialization.PlaceHolder;
 import com.heliosapm.asyncjmx.unsafe.UnsafeAdapter;
 
@@ -31,7 +30,7 @@ import com.heliosapm.asyncjmx.unsafe.UnsafeAdapter;
  * <p><b><code>com.heliosapm.asyncjmx.client.JMXOp</code></b>
  */
 @DefaultSerializer(JMXOp.JMXOpSerializer.class)
-public class JMXOp {
+public class JMXOp implements HistogramKeyProvider<JMXOpCode> {
 	/** The JMX Client Channel */
 	private Channel jmxChannel;
 	/** The JMX Op Code */
@@ -127,7 +126,23 @@ public class JMXOp {
 		return jmxDomain==null ? "DefaultDomain" : jmxDomain;
 	}
 	
-	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.asyncjmx.shared.serialization.HistogramKeyProvider#getHistogramKey()
+	 */
+	@Override
+	public JMXOpCode getHistogramKey() {
+		return jmxOpCode;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.asyncjmx.shared.serialization.HistogramKeyProvider#getVoidHistogramSize()
+	 */
+	@Override
+	public int getVoidHistogramSize() {
+		return 12 + (jmxDomain==null ? 0 : jmxDomain.getBytes().length);
+	}		
 	
 	/**
 	 * {@inheritDoc}
@@ -185,10 +200,22 @@ public class JMXOp {
 		int index = 0;
 		final int argCnt = opArguments.length;
 
+		/**
+		 * Indicates if there is another arg to read
+		 * @return true if there is another arg to read, false otherwise
+		 */
 		public boolean hasNext() {
 			return index < argCnt;
 		}
 		
+		/**
+		 * Returns the next arg
+		 * @param type The expected type of the arg to return
+		 * @return the next arg
+		 * @throws NoSuchElementException
+		 * @throws IllegalStateException
+		 */
+		@SuppressWarnings("unchecked")
 		public <T> T next(Class<T> type) throws NoSuchElementException, IllegalStateException {
 			if(index >= argCnt) {
 				throw new NoSuchElementException();
@@ -230,13 +257,13 @@ public class JMXOp {
 			}
 		}
 		
-		private final JMXOpDecoder2 replay;
+		private final JMXOpDecoder replay;
 		
 		/**
 		 * Creates a new JMXOpSerializer with a reference to the currently running replaying decoder
 		 * @param replay The replaying decoder to callback on as a step is complete
 		 */
-		public JMXOpSerializer(JMXOpDecoder2 replay) {
+		public JMXOpSerializer(JMXOpDecoder replay) {
 			super();
 			this.replay = replay;
 		}
@@ -255,7 +282,12 @@ public class JMXOp {
 			output.writeByte(op.jmxOpCode.opCode);
 			output.writeByte(op.opArguments.length);
 			for(Object o: op.opArguments) {
-				kryo.writeClassAndObject(output, o);
+				try {
+					kryo.writeClassAndObject(output, o);
+				} catch (Exception ex) {
+					log.info("Failure writing instance of [%s]", o.getClass().getName(), ex);
+					throw new RuntimeException(ex);
+				}
 			}
 		}
 		
@@ -268,16 +300,16 @@ public class JMXOp {
 		protected JMXOp doRead(Kryo kryo, Input input, Class<JMXOp> type) {
 			if(replay==null) {
 				return doReadNoReplay(kryo, input, type);
-			} else {
-				return doReadWithReplay(kryo, input, type);
 			}
+			return doReadWithReplay(kryo, input, type);
 		}
 		
 		/**
-		 * @param kryo
-		 * @param input
-		 * @param type
-		 * @return
+		 * Reads a JMXOp using the parent replaying decoder
+		 * @param kryo The kryo instance
+		 * @param input THe kryo input stream
+		 * @param type The decoding type
+		 * @return the decoded JMXOp
 		 */
 		protected JMXOp doReadWithReplay(Kryo kryo, Input input, Class<JMXOp> type) {
 			JMXOp state = (JMXOp)kryo.getContext().get("JMXOp");
@@ -335,10 +367,11 @@ public class JMXOp {
 		}
 		
 		/**
-		 * @param kryo
-		 * @param input
-		 * @param type
-		 * @return
+		 * Reads a JMXOp
+		 * @param kryo The kryo instance
+		 * @param input THe kryo input stream
+		 * @param type The decoding type
+		 * @return the decoded JMXOp
 		 */
 		protected JMXOp doReadNoReplay(Kryo kryo, Input input, Class<JMXOp> type) {			
 			int opSeq = input.readInt();

@@ -40,15 +40,13 @@ import com.esotericsoftware.kryo.io.Output;
  */
 
 public class AttributeListSerializer extends BaseSerializer<AttributeList> {
-	/** The attribute seralizer */
-	protected final AttributeSerializer attrSerializer = new AttributeSerializer();
 	
 	@Override
 	protected void doWrite(Kryo kryo, Output output, AttributeList object) {
 		output.writeInt(object.size());
 		log.info("AttributeList Size:%s", object.size());
 		for(Attribute attr: object.asList()) {
-			attrSerializer.write(kryo, output, attr);
+			kryo.writeClassAndObject(output, attr);
 		}		
 	}
 
@@ -58,9 +56,8 @@ public class AttributeListSerializer extends BaseSerializer<AttributeList> {
 			int size = input.readInt();
 			log.info("AttributeList Size:%s", size);
 			AttributeList attrs = new AttributeList(size);
-			for(int i = 0; i < size; i++) {
-				Attribute attr = attrSerializer.read(kryo, input, Attribute.class);
-				attrs.add(attr);
+			for(int i = 0; i < size; i++) {				
+				attrs.add((Attribute)kryo.readClassAndObject(input));
 			}
 			return attrs;
 		} catch (Exception ex) {

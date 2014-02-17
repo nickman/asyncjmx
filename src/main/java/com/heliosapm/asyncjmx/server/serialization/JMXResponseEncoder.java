@@ -34,11 +34,12 @@ import org.jboss.netty.channel.ChannelHandlerContext;
 import org.jboss.netty.handler.codec.oneone.OneToOneEncoder;
 
 import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.Serializer;
+import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.io.UnsafeOutput;
-import com.heliosapm.asyncjmx.shared.JMXOpCode;
+import com.heliosapm.asyncjmx.client.JMXOpResponse;
 import com.heliosapm.asyncjmx.shared.KryoFactory;
 import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
+import com.heliosapm.asyncjmx.shared.serialization.PayloadSizeHistogram;
 
 /**
  * <p>Title: JMXResponseEncoder</p>
@@ -50,20 +51,11 @@ import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 
 public class JMXResponseEncoder extends OneToOneEncoder {
 	/** The buffer factory for sending op invocations */
-	protected ChannelBufferFactory bufferFactory = new HeapChannelBufferFactory();
-	
+	protected ChannelBufferFactory bufferFactory = new HeapChannelBufferFactory();	
 	/** Instance logger */
 	private final JMXLogger log = JMXLogger.getLogger(getClass());
-
-	
-	/**
-	 * Estimates the size of the payload
-	 * @param payload The payload to extimate the size of
-	 * @return the estimated size in bytes
-	 */
-	protected int estimateSize(Object payload) {
-		return 1024;
-	}
+	/** The JMX Op payload size estimator */
+	protected final PayloadSizeHistogram<Class<?>> payloadSizeEstimator = new PayloadSizeHistogram<Class<?>>(); 
 	
 
 	/**
@@ -72,40 +64,33 @@ public class JMXResponseEncoder extends OneToOneEncoder {
 	 */
 	@Override
 	protected Object encode(ChannelHandlerContext ctx, Channel channel, Object msg) throws Exception {
-		if(!(msg instanceof Object[])) return msg;		
-		log.info("Serializing response");
-//		{JMXResponseType.JMX_RESPONSE.opCode, op.opCode, op.requestId, response}
-		Object[] resp = (Object[])msg;
-		 
-		ChannelBuffer header = ChannelBuffers.buffer(10);
-		JMXOpCode opCode = (JMXOpCode)resp[1];
-		header.writeByte((Byte)resp[0]);  // response type:	1
-		header.writeByte(opCode.opCode);  // jmx op: 1
-		header.writeInt((Integer)resp[2]); // request id: 4
-		final int sizeOffset = header.writerIndex();
-		header.writeInt(-1);				// the size of the payload placeholder 4
-		ChannelBuffer body = ChannelBuffers.dynamicBuffer(estimateSize(resp[3]), bufferFactory);
-		Kryo kryo = KryoFactory.getInstance().getKryo(channel);
-		ChannelBufferOutputStream cos = new ChannelBufferOutputStream(body);
-		UnsafeOutput out = new UnsafeOutput(cos);
-		try {
-			log.info("Writing out [%s], Reg: [%s]", resp[3], kryo.getRegistration(resp[3].getClass()));
-			if(opCode.hasSerializer()) {				
-				((Serializer<Object>)opCode.getSerializer()).write(kryo, out, resp[3]);
-			} else {
-				kryo.writeClassAndObject(out, resp[3]);
+		if(msg instanceof JMXOpResponse) {
+			final JMXOpResponse jmxOpResponse = (JMXOpResponse)msg;
+			Output kout = null;
+			ChannelBufferOutputStream out = null;
+			try {
+				ChannelBuffer body = ChannelBuffers.dynamicBuffer(payloadSizeEstimator.estimateSize(jmxOpResponse), bufferFactory);
+				body.writeInt(0);
+				out = new ChannelBufferOutputStream(body);			
+				Kryo kryo = KryoFactory.getInstance().getKryo(channel);			
+				kout = new UnsafeOutput(out);
+				kryo.writeObject(kout, jmxOpResponse);
+				kout.flush();
+				int payloadSize = body.writerIndex() - 4;
+				body.setInt(0, payloadSize);
+				out.flush();						
+				log.info("Sending Encoded Op Response with [%s] bytes.  Total Payload: [%s].  Op: %s", payloadSize, body.writerIndex(), jmxOpResponse);
+				payloadSizeEstimator.sample(jmxOpResponse, body.writerIndex());
+				return body;
+			} catch (Exception ex) {
+				log.error("JMXResponseEncoder failure", ex);
+				throw ex;
+			} finally {
+				if(kout!=null) try { kout.close(); } catch (Exception x) { /* No Op */ }
+				if(out!=null) try { out.close(); } catch (Exception x) { /* No Op */ }
 			}
-			out.flush();
-			cos.flush();
-		} catch (Exception ex) {
-			log.warn("Write failed. Writing NonSer");
-			body = KryoFactory.getInstance().getNonSerializable(kryo, msg);
 		}
-		
-		header.setInt(sizeOffset, body.writerIndex());
-		log.info("Write out complete. Body was [%s] bytes", body.writerIndex());		
-		//ctx.sendDownstream(new DownstreamMessageEvent(channel, Channels.future(channel), buf, channel.getRemoteAddress()));
-		return ChannelBuffers.wrappedBuffer(header, body);
+		return null;
 	}
 
 }

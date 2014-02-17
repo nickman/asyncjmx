@@ -109,7 +109,7 @@ public class AsyncJMXClient implements ChannelUpstreamHandler {
 	public MBeanServerConnection connectMBeanServerConnection(String host, int port, boolean async) {
 		Channel channel = clientBootstrap.connect(new InetSocketAddress(host, port)).awaitUninterruptibly().getChannel();
 		if(!async) {
-			return new SyncMBeanServerConnection(channel, 300000);
+			return new SyncMBeanServerConnection(channel, 3000);
 		}
 		throw new RuntimeException("No async yet");
 		

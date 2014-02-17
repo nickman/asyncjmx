@@ -48,21 +48,21 @@ public abstract class BaseSerializer<T> extends Serializer<T> {
 	public void write(Kryo kryo, Output output, T object) {
 		final String ind = indent();
 		if(object==null) {
-			log.info("%s Writing null", ind);
+			log.debug("%s Writing null", ind);
 		} else {
-			log.info("%s Writing instance of [%s]", ind, object.getClass().getName());
+			log.debug("%s Writing instance of [%s]", ind, object.getClass().getName());
 		}
 		try {
 			doWrite(kryo, output, object);
 			if(object==null) {
-				log.info("%s Wrote null", ind);
+				log.debug("%s Wrote null", ind);
 			} else {
-				log.info("%s Wrote instance of [%s] -->[%s]", ind, object.getClass().getName(), object.toString());
+				log.debug("%s Wrote instance of [%s] -->[%s]", ind, object.getClass().getName(), object.toString());
 			}
 			
 		} catch (Exception ex) {
-			log.error("Serializer write failed", ex);
-			throw new RuntimeException("Serializer write [" + getClass().getSimpleName() + "] failed", ex);
+			log.error("Serializer write failed:[%s]", ex.toString());
+			throw new RuntimeException("Serializer write [" + getClass().getSimpleName() + "] failed:" + ex);
 		} finally {
 			undent();
 		}
@@ -71,18 +71,18 @@ public abstract class BaseSerializer<T> extends Serializer<T> {
 	@Override
 	public T read(Kryo kryo, Input input, Class<T> type) {
 		final String ind = indent();
-		log.info("%s Reading instance of [%s]", ind, type.getName());
+		log.debug("%s Reading instance of [%s]", ind, type.getName());
 		try {
 			T t = doRead(kryo, input, type);
 			if(t!=null) {
-				log.info("%s Read instance of [%s]-->[%s]", ind, type.getName(), t);
+				log.debug("%s Read instance of [%s]-->[%s]", ind, type.getName(), t);
 			} else {
-				log.info("%s Read null instance of [%s]", ind, type.getName());
+				log.debug("%s Read null instance of [%s]", ind, type.getName());
 			}
 			return t;
 		} catch (Exception ex) {
-			log.error("Serializer read failed", ex);
-			throw new RuntimeException("Serializer read [" + getClass().getSimpleName() + "] failed", ex);
+			log.error("Serializer read failed:[%s]", ex.toString());
+			throw new RuntimeException("Serializer read [" + getClass().getSimpleName() + "] failed:" + ex);
 		} finally {
 			undent();
 		}

@@ -28,7 +28,6 @@ import javax.management.openmbean.CompositeType;
 import javax.management.openmbean.OpenType;
 
 import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.Registration;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
@@ -68,11 +67,11 @@ public class CompositeTypeSerializer extends Serializer<CompositeType> {
 		int size = input.readInt();
 		String[] itemNames = new String[size];
 		String[] itemDescriptions = new String[size];
-		OpenType[] itemTypes = new OpenType[size];
+		OpenType<?>[] itemTypes = new OpenType[size];
 		for(int i = 0; i < size; i++) {
 			itemNames[i] = input.readString();
 			itemDescriptions[i] = input.readString();
-			itemTypes[i] =  (OpenType)kryo.readClassAndObject(input); //otSerialzier.read(kryo, input, OpenType.class);
+			itemTypes[i] =  (OpenType<?>)kryo.readClassAndObject(input); //otSerialzier.read(kryo, input, OpenType.class);
 		}
 		try {
 			return new CompositeType(typeName, description, itemNames, itemDescriptions, itemTypes);

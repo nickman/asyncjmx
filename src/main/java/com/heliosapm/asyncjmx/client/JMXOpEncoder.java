@@ -40,9 +40,11 @@ import org.jboss.netty.handler.codec.oneone.OneToOneEncoder;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.io.UnsafeOutput;
+import com.heliosapm.asyncjmx.shared.JMXOp;
 import com.heliosapm.asyncjmx.shared.JMXOpCode;
 import com.heliosapm.asyncjmx.shared.KryoFactory;
 import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
+import com.heliosapm.asyncjmx.shared.serialization.PayloadSizeHistogram;
 import com.heliosapm.asyncjmx.unsafe.collections.ConcurrentLongSlidingWindow;
 
 /**
@@ -58,57 +60,8 @@ public class JMXOpEncoder extends OneToOneEncoder {
 	protected ChannelBufferFactory bufferFactory = new HeapChannelBufferFactory();
 	/** Instance logger */
 	protected final JMXLogger log = JMXLogger.getLogger(getClass());
-
-	/** A histogram of JMXOpCode serialization sizes */
-	protected Map<JMXOpCode, ConcurrentLongSlidingWindow> opSizeHistory = new ConcurrentHashMap<JMXOpCode, ConcurrentLongSlidingWindow>();
-	/** The default sampling size for JMXOp serialization sizes histograms */
-	public static final int DEFAULT_HISTOGRAM_SIZE = 128;
-	/** The default percentile to calculate estimated sizes with */
-	public static final int DEFAULT_HISTOGRAM_PERCENTILE = 90;
-	/** The default byte size estimate if the histogram has less than 2 samples */
-	public static final int DEFAULT_SIZE = 1024;
-	
-	/**
-	 * Acquires the histogram for the passed JMXOpCode
-	 * @param opCode The JMXOpCode to get the histogram for
-	 * @return the histogram
-	 */
-	protected ConcurrentLongSlidingWindow getJMXOpHistogram(JMXOpCode opCode) {
-		ConcurrentLongSlidingWindow csw = opSizeHistory.get(opCode);
-		if(csw==null) {
-			synchronized(opSizeHistory) {
-				csw = opSizeHistory.get(opCode);
-				if(csw==null) {
-					csw = new ConcurrentLongSlidingWindow(DEFAULT_HISTOGRAM_SIZE);
-					opSizeHistory.put(opCode, csw);
-				}
-			}
-		}
-		return csw;
-	}
-	
-	
-	/**
-	 * Adds a new sampling to the JMXOpCode histogram
-	 * @param op The jmx op for which a sample was taken
-	 * @param size The sampled size in bytes 
-	 */
-	protected void sample(JMXOp op, int size) {
-		getJMXOpHistogram(op.getJmxOpCode()).insert(size);
-	}
-	
-	/**
-	 * Estimates the size of the payload
-	 * @param op The JMX Op being serialized
-	 * @return the estimated size in bytes
-	 */
-	protected int estimateSize(JMXOp op) {
-		ConcurrentLongSlidingWindow csw = getJMXOpHistogram(op.getJmxOpCode());
-		if(csw.size() < 3) return DEFAULT_SIZE;
-		return (int)csw.percentile(DEFAULT_HISTOGRAM_PERCENTILE);
-	}
-	
-
+	/** The JMX Op payload size estimator */
+	protected final PayloadSizeHistogram<JMXOpCode> payloadSizeEstimator = new PayloadSizeHistogram<JMXOpCode>(); 
 
 	/**
 	 * {@inheritDoc}
@@ -121,7 +74,7 @@ public class JMXOpEncoder extends OneToOneEncoder {
 			Output kout = null;
 			ChannelBufferOutputStream out = null;
 			try {
-				ChannelBuffer body = ChannelBuffers.dynamicBuffer(estimateSize(jmxOp), bufferFactory);
+				ChannelBuffer body = ChannelBuffers.dynamicBuffer(payloadSizeEstimator.estimateSize(jmxOp), bufferFactory);
 				body.writeInt(0);
 				out = new ChannelBufferOutputStream(body);			
 				Kryo kryo = KryoFactory.getInstance().getKryo(channel);			
@@ -132,7 +85,7 @@ public class JMXOpEncoder extends OneToOneEncoder {
 				body.setInt(0, payloadSize);
 				out.flush();						
 				log.info("Sending Encoded Op with [%s] bytes.  Total Payload: [%s].  Op: %s", payloadSize, body.writerIndex(), jmxOp);
-				sample(jmxOp, body.writerIndex());
+				payloadSizeEstimator.sample(jmxOp, body.writerIndex());
 				return body;
 			} catch (Exception ex) {
 				log.error("JMXOpEncoder failure", ex);

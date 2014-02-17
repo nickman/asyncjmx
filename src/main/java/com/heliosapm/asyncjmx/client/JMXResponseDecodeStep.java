@@ -33,18 +33,13 @@ package com.heliosapm.asyncjmx.client;
  */
 
 public enum JMXResponseDecodeStep {
-	/** The one byte response type code */
-	TYPECODE,	
-	/** The one byte op code */
-	OPCODE,
-	/** The one int request id */
+	/** The total byte size of the entire response wrapper */
+	BYTESIZE,
+	/** The one int originating request id */
 	REQUESTID,
-	/** The size of the response object in bytes */
-	SIZE,
-	/** The op response */
-	RESPONSE,
-	/** The cache op advisory from the server */
-	CACHEOP,
-	/** A notification from the server */
-	NOTIFICATION;
+	/** The one byte op code that a repsonse is responding to */
+	OPCODE,
+	/** The op response value */
+	RESPONSE;
+
 }

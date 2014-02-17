@@ -51,8 +51,10 @@ public class JConsole {
 			 URLClassLoader ucl = new URLClassLoader(urls, Thread.currentThread().getContextClassLoader());
 			 Class<?> jconsoleClazz = Class.forName("sun.tools.jconsole.JConsole", true, ucl);
 			 //String[] pid = new String[]{ManagementFactory.getRuntimeMXBean().getName().split("@")[0]};
-			 String[] pid = new String[]{"1823"};
-			 jconsoleClazz.getDeclaredMethod("main", String[].class).invoke(null, new Object[]{pid});
+//			 //String[] pid = new String[]{"1823"};
+			 String[] jmxurl = new String[]{"service:jmx:syncajmx://localhost:9061"};
+//			 jconsoleClazz.getDeclaredMethod("main", String[].class).invoke(null, new Object[]{new String[]{"(service:jmx:syncajmx://localhost:9061"}});
+			 jconsoleClazz.getDeclaredMethod("main", String[].class).invoke(null, new Object[]{jmxurl});
 		} catch (Exception ex) {
 			System.err.println(ex.getMessage());
 		}

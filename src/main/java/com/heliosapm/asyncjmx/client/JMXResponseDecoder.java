@@ -25,14 +25,25 @@
 package com.heliosapm.asyncjmx.client;
 
 import org.jboss.netty.buffer.ChannelBuffer;
+import org.jboss.netty.buffer.ChannelBufferFactory;
 import org.jboss.netty.buffer.ChannelBufferInputStream;
+import org.jboss.netty.buffer.ChannelBuffers;
+import org.jboss.netty.buffer.DirectChannelBufferFactory;
+import org.jboss.netty.buffer.HeapChannelBufferFactory;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelHandlerContext;
+import org.jboss.netty.handler.codec.replay.ReplayingDecoder;
 
+import com.esotericsoftware.kryo.DefaultSerializer;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.UnsafeInput;
+import com.heliosapm.asyncjmx.server.serialization.JMXOpDecodeStep;
+import com.heliosapm.asyncjmx.shared.JMXOp;
 import com.heliosapm.asyncjmx.shared.JMXOpCode;
 import com.heliosapm.asyncjmx.shared.JMXResponseType;
-import com.heliosapm.asyncjmx.shared.serialization.AttributeListSerializer;
-import com.heliosapm.asyncjmx.shared.serialization.KryoReplayingDecoder;
+import com.heliosapm.asyncjmx.shared.KryoFactory;
+import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
+import com.heliosapm.asyncjmx.shared.util.ConfigurationHelper;
 
 /**
  * <p>Title: JMXResponseDecoder</p>
@@ -42,89 +53,100 @@ import com.heliosapm.asyncjmx.shared.serialization.KryoReplayingDecoder;
  * <p><code>com.heliosapm.asyncjmx.client.JMXResponseDecoder</code></p>
  */
 
-public class JMXResponseDecoder extends KryoReplayingDecoder<JMXResponseDecodeStep> {
-	/** The chanel buffer's input stream */
-	protected ChannelBufferInputStream is = null;
-	/** The JMX Response Type */
-	protected JMXResponseType responseType = null;
-	/** The JMX Request Op Code if the response type is an Op return */
-	protected JMXOpCode opCode = null;
-	/** The JMX Request original request id if the response type is an Op return */
-	protected int requestId = -1;
-	/** The size of the response in bytes */
-	protected int responseSize = -1;
-	/** The response to an op call, or the notification object for async notifications */
-	protected Object response = null;
+public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> {
+	/** The channel buffer factory for decoding JMXOp buffers */
+	protected static final ChannelBufferFactory bufferFactory;
+	
+	static {
+		boolean directBuffer = ConfigurationHelper.getBooleanSystemThenEnvProperty("com.heliosapm.asyncjmx.server.buffers.direct", false);
+		if(directBuffer) {
+			bufferFactory = new DirectChannelBufferFactory();
+		} else {
+			bufferFactory = new HeapChannelBufferFactory();
+		}
+	}
+	
+	/** Instance logger */
+	protected final JMXLogger log = JMXLogger.getLogger(getClass());
+	
 	
 	/** The name of the response handler in the pipeline */
 	public static final String RESPONSE_HANDLER_NAME = "responseHandler";
 
 	
+	/** The JMXOpResponse kryo replaying deserializer */
+	protected JMXOpResponse.JMXOpResponseSerializer ser = new JMXOpResponse.JMXOpResponseSerializer(this);
+	/** The kryo input */
+	protected Input input = null;
+	/** The payload size allocated channel buffer */
+	protected ChannelBuffer buff = null;
+	/** The payload size of the currently processing decode */
+	int payloadSize = -1;
+	
 	/**
 	 * Creates a new JMXResponseDecoder
 	 */
 	public JMXResponseDecoder() {
-		super(JMXResponseDecodeStep.TYPECODE);
+		super(JMXResponseDecodeStep.BYTESIZE);
 	}
 	
+	/**
+	 * {@inheritDoc}
+	 * @see org.jboss.netty.handler.codec.replay.ReplayingDecoder#getState()
+	 */
+	@Override
+	public JMXResponseDecodeStep getState() {
+		return super.getState();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see org.jboss.netty.handler.codec.replay.ReplayingDecoder#checkpoint(java.lang.Enum)
+	 */
+	@Override
+	public void checkpoint(JMXResponseDecodeStep state) {
+		super.checkpoint(state);
+	}
+	
+	/**
+	 * Returns the replaying decoder's managed buffer
+	 * @return the replaying decoder's managed buffer
+	 */
+	public ChannelBuffer getBuff() {
+		return buff;
+	}
+	
+	
+	/**
+	 * {@inheritDoc}
+	 * @see org.jboss.netty.handler.codec.replay.ReplayingDecoder#internalBuffer()
+	 */
+	@Override
+	public ChannelBuffer internalBuffer() {
+		return super.internalBuffer();
+	}
 
 	/**
 	 * {@inheritDoc}
 	 * @see org.jboss.netty.handler.codec.replay.ReplayingDecoder#decode(org.jboss.netty.channel.ChannelHandlerContext, org.jboss.netty.channel.Channel, org.jboss.netty.buffer.ChannelBuffer, java.lang.Enum)
 	 */
 	@Override
-	protected Object decode(ChannelHandlerContext ctx, Channel channel,
-			ChannelBuffer buffer, JMXResponseDecodeStep state) throws Exception {
-		switch(state) {
-			case TYPECODE:
-				responseType = JMXResponseType.decode(buffer.readByte());
-				log.info("ResponseType:" + responseType);
-				switch(responseType) {
-				case CACHE_OP:
-					checkpoint(JMXResponseDecodeStep.CACHEOP);
-					break;
-				case JMX_NOTIFICATION:
-					checkpoint(JMXResponseDecodeStep.NOTIFICATION);
-					break;
-				case JMX_RESPONSE:
-					checkpoint(JMXResponseDecodeStep.OPCODE);
-				}
-			//$FALL-THROUGH$
-			case OPCODE:
-				opCode = JMXOpCode.decode(buffer.readByte());
-				log.info("JMXOpCode:" + opCode);
-				checkpoint(JMXResponseDecodeStep.REQUESTID);				
-			//$FALL-THROUGH$
-			case REQUESTID:
-				requestId = buffer.readInt();
-				log.info("RequestID:" + requestId);
-				checkpoint(JMXResponseDecodeStep.SIZE);
-			//$FALL-THROUGH$
-			case SIZE:
-				responseSize = buffer.readInt();
-				log.info("Response Size:" + responseSize);
-				checkpoint(JMXResponseDecodeStep.RESPONSE);
-			//$FALL-THROUGH$
-			case RESPONSE:
-				
-				if(opCode.hasSerializer()) {
-					log.info("Decoding Response for [%s] with Ser:[%s]", opCode, opCode.getSerializer().getClass().getSimpleName());
-					response = kryoRead(channel, buffer, opCode.getSerializer(), opCode.returnType, responseSize);
-				} else {
-					log.info("Decoding Response for [%s] with No Ser", opCode);
-					response = kryoRead(channel, buffer, responseSize);
-				}
-				log.info("Returning new JMXOpResponse Op:[%s] Id:[%s]", opCode, requestId);
-				//try { buffer.discardReadBytes(); } catch (Exception x) { /* No Op */ }
-				checkpoint(JMXResponseDecodeStep.TYPECODE);
-				return new JMXOpResponse(opCode, requestId, response);
-			case CACHEOP:
-				break;
-			case NOTIFICATION:
-				break;
-		
+	protected Object decode(ChannelHandlerContext ctx, Channel channel, ChannelBuffer buffer, JMXResponseDecodeStep state) throws Exception {
+		if(state==JMXResponseDecodeStep.BYTESIZE) {
+			payloadSize = buffer.readInt();
+			log.info("JMXOpResponse Decode Starting. Payload Size: [%s] bytes", payloadSize);
+			checkpoint(JMXResponseDecodeStep.REQUESTID);			
+			buff = bufferFactory.getBuffer(payloadSize);						
 		}
-		return null;
+		
+//		int readableBytesAvailable = super.actualReadableBytes();
+//		log.info("PRE: Payload Size: [%s], Replay Bytes Available: [%s]", payloadSize, readableBytesAvailable);
+//		buff.writeBytes(buffer, Math.min(readableBytesAvailable, payloadSize));
+//		input = new UnsafeInput(new ChannelBufferInputStream(buff));
+//		log.info("POST: Buff Bytes Available: [%s]",buff.readableBytes());
+
+		input = new UnsafeInput(new ChannelBufferInputStream(ChannelBuffers.wrappedBuffer(buffer)));		
+		return ser.read(KryoFactory.getInstance().getKryo(channel), input, JMXOpResponse.class);		
 	}
 
 }

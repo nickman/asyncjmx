@@ -61,6 +61,7 @@ import org.jboss.netty.channel.ChannelHandlerContext;
 import org.jboss.netty.channel.ChannelUpstreamHandler;
 import org.jboss.netty.channel.UpstreamMessageEvent;
 
+import com.heliosapm.asyncjmx.shared.JMXOp;
 import com.heliosapm.asyncjmx.shared.JMXOpCode;
 import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 import com.heliosapm.asyncjmx.shared.serialization.NullResult;

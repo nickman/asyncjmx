@@ -48,8 +48,9 @@ import org.jboss.netty.channel.ExceptionEvent;
 import org.jboss.netty.channel.MessageEvent;
 import org.jboss.netty.channel.SimpleChannelHandler;
 
-import com.heliosapm.asyncjmx.client.JMXOp;
-import com.heliosapm.asyncjmx.client.JMXOp.DynamicTypedIterator;
+import com.heliosapm.asyncjmx.client.JMXOpResponse;
+import com.heliosapm.asyncjmx.shared.JMXOp;
+import com.heliosapm.asyncjmx.shared.JMXOp.DynamicTypedIterator;
 import com.heliosapm.asyncjmx.shared.JMXResponseType;
 import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 import com.heliosapm.asyncjmx.shared.serialization.VoidResult;
@@ -140,8 +141,8 @@ public class JMXMBeanServerInvocationHandler extends SimpleChannelHandler {
 			JMXOp op = (JMXOp)msg;
 			Object response = invoke(op);
 			log.info("[%s] request result: type:[%s], value:[%s]", op.getJmxOpCode(), response.getClass().getName(), response);
-			//sendResponseHeader(ctx, e.getRemoteAddress(), op.opCode, op.requestId);
-			writeRequested(ctx, new DownstreamMessageEvent(channel, Channels.future(channel), new Object[]{JMXResponseType.JMX_RESPONSE.opCode, op.getJmxOpCode(), op.getOpSeq(), response}, e.getRemoteAddress()));
+			JMXOpResponse jmxResponse = new JMXOpResponse(op.getJmxOpCode(), op.getOpSeq(), response); 
+			writeRequested(ctx, new DownstreamMessageEvent(channel, Channels.future(channel), jmxResponse, e.getRemoteAddress()));
 		} else {
 			super.messageReceived(ctx, e);
 		}

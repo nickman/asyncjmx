@@ -2,7 +2,7 @@
  * Helios, OpenSource Monitoring
  * Brought to you by the Helios Development Group
  *
- * Copyright 2007, Helios Development Group and individual contributors
+ * Copyright 2014, Helios Development Group and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -24,33 +24,25 @@
  */
 package com.heliosapm.asyncjmx.shared.serialization;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBufferInputStream;
-
-import com.esotericsoftware.kryo.io.Input;
-
 /**
- * <p>Title: ChannelBufferInput</p>
- * <p>Description: </p> 
+ * <p>Title: HistogramKeyProvider</p>
+ * <p>Description: Defines a class that can provide a key to a {@link PayloadSizeHistogram}.</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.asyncjmx.shared.serialization.ChannelBufferInput</code></p>
+ * <p><code>com.heliosapm.asyncjmx.shared.serialization.HistogramKeyProvider</code></p>
+ * @param <T> The type of the histogram key
  */
 
-public class ChannelBufferInput extends Input {
-//	protected final ChannelBufferInputStream inputStream;
-	protected final ChannelBuffer buffer;
-
+public interface HistogramKeyProvider<T> {
 	/**
-	 * Creates a new ChannelBufferInput
-	 * @param buffer
+	 * Returns the histogram key for this provider
+	 * @return the histogram key 
 	 */
-	public ChannelBufferInput(ChannelBuffer buffer) {
-		super(new ChannelBufferInputStream(buffer));
-		this.buffer = buffer;
-	}
+	public T getHistogramKey();
 	
-	public int available() {
-		return buffer.readableBytes();
-	}
+	/**
+	 * Returns the buffer size for a null histogram key instance 
+	 * @return the buffer size for a null histogram key instance
+	 */
+	public int getVoidHistogramSize();
 }
