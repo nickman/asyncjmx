@@ -173,7 +173,7 @@ public class JMXOp implements HistogramKeyProvider<JMXOpCode> {
 		}
 		if (opArguments != null) {
 			builder.append("opArguments [");
-			builder.append(Arrays.toString(opArguments));
+			builder.append(Arrays.deepToString(opArguments));
 			builder.append("], ");
 		}
 		builder.append("]");

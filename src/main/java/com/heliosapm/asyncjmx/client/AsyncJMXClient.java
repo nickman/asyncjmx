@@ -34,6 +34,8 @@ import java.util.logging.LogManager;
 import java.util.logging.Logger;
 
 import javax.management.AttributeList;
+import javax.management.Descriptor;
+import javax.management.ImmutableDescriptor;
 import javax.management.MBeanAttributeInfo;
 import javax.management.MBeanInfo;
 import javax.management.MBeanServerConnection;
@@ -41,6 +43,7 @@ import javax.management.ObjectInstance;
 import javax.management.ObjectName;
 
 import org.jboss.netty.bootstrap.ClientBootstrap;
+import org.jboss.netty.buffer.DirectChannelBufferFactory;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelEvent;
 import org.jboss.netty.channel.ChannelFactory;
@@ -104,6 +107,10 @@ public class AsyncJMXClient implements ChannelUpstreamHandler {
 		
 		clientBootstrap = new ClientBootstrap(channelFactory);
 		clientBootstrap.setPipelineFactory(new JMXClientPipelineFactory(this));		
+		clientBootstrap.setOption("tcpNoDelay", true);
+		clientBootstrap.setOption("receiveBufferSize", 1048576);
+		clientBootstrap.setOption("sendBufferSize", 1048576);
+		clientBootstrap.setOption("bufferFactory", new DirectChannelBufferFactory(2048));
 	}
 	
 	public MBeanServerConnection connectMBeanServerConnection(String host, int port, boolean async) {
@@ -115,21 +122,37 @@ public class AsyncJMXClient implements ChannelUpstreamHandler {
 		
 	}
 	
+	public static void log(String format, Object...args) {
+		System.out.println(String.format(format, args));
+	}
+	
 	public static void main(String[] args) {
 		AsyncJMXClient client = new AsyncJMXClient();
 		try {
 			MBeanServerConnection conn = client.connectMBeanServerConnection("localhost", 9061, false);
-//			System.out.println("DefaultDomain:" + conn.getDefaultDomain());
-			Set<ObjectInstance> objectInstances = conn.queryMBeans(null, null);
-			if(objectInstances!=null) {
-				System.out.println("ObjectInstances:" + objectInstances.size());
-				for(Object on: objectInstances) {
-					System.out.println("\t" + on);
-				}
-			} else {
-				System.out.println("QueryMBeans Failed");
-			}
+			log("Connected [%s]", conn);
+			ObjectName on = new ObjectName("java.lang:type=Threading");
+			boolean reg = conn.isRegistered(on);
+			log("isRegistered(%s):%s", on, reg);
+			on = new ObjectName("com.sun.management:type=HotSpotDiagnostic");
+			reg = conn.isRegistered(on);
+			log("isRegistered(%s):%s", on, reg);
+			on = new ObjectName("java.lang:type=Threading");
+			MBeanInfo minfo = conn.getMBeanInfo(on);
+			log("MBeanInfo for [%s]:\n%s", on, minfo);
 			
+//			
+////			System.out.println("DefaultDomain:" + conn.getDefaultDomain());
+//			Set<ObjectInstance> objectInstances = conn.queryMBeans(null, null);
+//			if(objectInstances!=null) {
+//				System.out.println("ObjectInstances:" + objectInstances.size());
+//				for(Object on: objectInstances) {
+//					System.out.println("\t{" + on + "}");
+//				}
+//			} else {
+//				System.out.println("QueryMBeans Failed");
+//			}
+//			
 //			Set<ObjectName> objectNames = conn.queryNames(null, null);
 //			if(objectNames!=null) {
 //				System.out.println("ObjectNames:" + objectNames.size());
@@ -139,7 +162,7 @@ public class AsyncJMXClient implements ChannelUpstreamHandler {
 //			} else {
 //				System.out.println("QueryNames Failed");
 //			}
-
+//
 //			
 //			
 //			ObjectName obn = null;			
@@ -157,26 +180,6 @@ public class AsyncJMXClient implements ChannelUpstreamHandler {
 //			System.out.println("Minfo:[" + obn + "]\n" + minfo);
 //			
 //			if(minfo==null) return;
-//			
-//			
-//			Set<ObjectName> objectNames = conn.queryNames(null, null);
-//			if(objectNames!=null) {
-//				System.out.println("ObjectNames:" + objectNames.size());
-//				for(Object on: objectNames) {
-//					System.out.println("\t" + on);
-//				}
-//			} else {
-//				System.out.println("QueryNames Failed");
-//			}
-//			Set<ObjectInstance> objectInstances = conn.queryMBeans(null, null);
-//			if(objectInstances!=null) {
-//				System.out.println("ObjectInstances:" + objectInstances.size());
-//				for(Object on: objectInstances) {
-//					System.out.println("\t" + on);
-//				}
-//			} else {
-//				System.out.println("QueryMBeans Failed");
-//			}
 //			for(ObjectName on: conn.queryNames(null, null)) {
 //				System.out.println("Sending GETMBEANINFO for [" + on + "]");
 //				minfo = conn.getMBeanInfo(on);
@@ -186,11 +189,20 @@ public class AsyncJMXClient implements ChannelUpstreamHandler {
 //					
 //					for(MBeanAttributeInfo ma: minfo.getAttributes()) {
 //						attrNames.add(ma.getName());
+//						Descriptor d = ma.getDescriptor();
+//						if(d!=null) {
+//							if(d instanceof ImmutableDescriptor) {
+//								System.out.println("ImmutableDescriptor:" + d);
+//							} else {
+//								System.out.println("Descriptor:" + d);
+//							}
+//							
+//						}
 //					}
 //				} catch (Exception ex) {
 //					UnsafeAdapter.throwException(ex);
 //				}
-//				conn.getAttributes(on, attrNames.toArray(new String[attrNames.size()]));
+//				AttributeList attrs = conn.getAttributes(on, attrNames.toArray(new String[attrNames.size()]));
 //			}
 			System.out.println("\n\t========================================\n\tCOMPLETE\n\t========================================\n");
 		} catch (Exception ex) {

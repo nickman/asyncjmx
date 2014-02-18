@@ -67,17 +67,17 @@ public class JMXOpDecoder extends ReplayingDecoder<JMXOpDecodeStep> {
 		
 		if(state==JMXOpDecodeStep.BYTESIZE) {
 			payloadSize = buffer.readInt();
-			log.info("JMXOp Decode Starting. Payload Size: [%s] bytes", payloadSize);
+			log.debug("JMXOp Decode Starting. Payload Size: [%s] bytes", payloadSize);
 			checkpoint(JMXOpDecodeStep.REQUESTID);
 			replayBytesRead += 4;
 			buff = bufferFactory.getBuffer(payloadSize);						
 		}
 		
 		int readableBytesAvailable = super.actualReadableBytes();
-		log.info("PRE: Payload Size: [%s], Replay Bytes Available: [%s]", payloadSize, readableBytesAvailable);
+		log.debug("PRE: Payload Size: [%s], Replay Bytes Available: [%s]", payloadSize, readableBytesAvailable);
 		buff.writeBytes(buffer, Math.min(readableBytesAvailable, payloadSize));
 		input = new UnsafeInput(new ChannelBufferInputStream(buff));
-		log.info("POST: Buff Bytes Available: [%s], Input Available: [%s]",buff.readableBytes(), input.available());
+		log.debug("POST: Buff Bytes Available: [%s], Input Available: [%s]",buff.readableBytes(), input.available());
 		return ser.read(KryoFactory.getInstance().getKryo(channel), input, JMXOp.class);
 	}
 	

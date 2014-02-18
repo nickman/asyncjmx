@@ -42,7 +42,7 @@ public class AttributeSerializer extends BaseSerializer<Attribute> {
 	@Override
 	protected void doWrite(Kryo kryo, Output output, Attribute object) {
 		log.debug("Writing Attribute [%s]", object.getName());
-		output.writeString(object.getName());		
+		output.writeString(object.getName());			
 		Object value = object.getValue();
 		if(value==null) {
 			output.writeByte(0);

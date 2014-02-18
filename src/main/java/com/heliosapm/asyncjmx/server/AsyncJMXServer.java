@@ -35,6 +35,7 @@ import java.util.logging.LogManager;
 import java.util.logging.Logger;
 
 import org.jboss.netty.bootstrap.ServerBootstrap;
+import org.jboss.netty.buffer.DirectChannelBufferFactory;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelEvent;
 import org.jboss.netty.channel.ChannelFactory;
@@ -109,6 +110,11 @@ public class AsyncJMXServer implements ChannelUpstreamHandler {
 		
 		serverBootstrap = new ServerBootstrap(channelFactory);
 		serverBootstrap.setPipelineFactory(new JMXServerPipelineFactory(this));
+		serverBootstrap.setOption("child.tcpNoDelay", true);
+		serverBootstrap.setOption("child.receiveBufferSize", 1048576);
+		serverBootstrap.setOption("child.sendBufferSize", 1048576);
+		serverBootstrap.setOption("child.bufferFactory", new DirectChannelBufferFactory(2048));
+		 		
 		
 		socketAddress = new InetSocketAddress(bindInterface, port);
 		serverChannel = serverBootstrap.bind(socketAddress);

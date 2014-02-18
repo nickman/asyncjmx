@@ -111,6 +111,8 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 	}
 	
 	
+	protected final AtomicInteger _concurrency_ = new AtomicInteger(0);
+	
 	/**
 	 * Writes the JMX invocation request to the remote server
 	 * @param returnType The expected return type, defaults to {@link VoidResult} if null.
@@ -118,24 +120,31 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 	 */
 	@SuppressWarnings("unchecked")
 	protected <T> T writeRequest(Class<T> returnType, final JMXOp op) {
-		currentRid.set(op.getOpSeq());
-		channel.write(op).addListener(new ChannelFutureListener() {
-			@Override
-			public void operationComplete(ChannelFuture future) throws Exception {
-				log.info("Write for op [%s]--[%s]--[%s] complete", op.getJmxOpCode().name(), op.getOpSeq(), Arrays.toString(op.getOpArguments()));
-			}
-		});
-		Object retValue = null;
+		final int concurrency = _concurrency_.incrementAndGet();
+		if(concurrency>1) {
+			//log.warn("\n\t!!!!!!!!!!!!!!!\n\tConcurrency:[%s]\n\t!!!!!!!!!!!!!!!\n", concurrency);
+		}
 		try {
-			retValue = timeoutQueue.poll(timeout, TimeUnit.MILLISECONDS);
-			if(retValue instanceof PlaceHolder) return null;
-			if(retValue instanceof Throwable) {
-				UnsafeAdapter.throwException((Throwable)retValue);
+			currentRid.set(op.getOpSeq());
+			channel.write(op).addListener(new ChannelFutureListener() {
+				@Override
+				public void operationComplete(ChannelFuture future) throws Exception {
+					log.debug("Write for op [%s]--[%s]--[%s] complete", op.getJmxOpCode().name(), op.getOpSeq(), Arrays.toString(op.getOpArguments()));
+				}
+			});
+			Object retValue = null;
+			try {
+				retValue = timeoutQueue.poll(timeout, TimeUnit.MILLISECONDS);
+				if(retValue instanceof PlaceHolder) return null;
+				if(retValue instanceof Throwable) {
+					UnsafeAdapter.throwException((Throwable)retValue);
+				}
+				return (T)retValue;
+			} catch (InterruptedException e) {
+				throw new RuntimeException(e);
 			}
-			return (T)retValue;
-		} catch (InterruptedException e) {
-			throw new RuntimeException(e);
 		} finally {
+			_concurrency_.decrementAndGet();
 		}
 	}
 	
@@ -149,9 +158,11 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 			Object obj = ((UpstreamMessageEvent)e).getMessage();
 			try {
 				if(obj!=null) {
-					log.info("Received Upstream Message Event [%s]", obj.getClass().getName());
+					log.debug("Received Upstream Message Event [%s]", obj.getClass().getName());
 					if(obj instanceof JMXOpResponse) {
-						Object response = ((JMXOpResponse)obj).getResponse();
+						JMXOpResponse jmxResponse = (JMXOpResponse)obj;
+						log.info("REQID:[%s] Response: %s", jmxResponse.getRequestId(), jmxResponse);
+						Object response = jmxResponse.getResponse();
 						if(response!=null) {
 							timeoutQueue.add(response);
 						} else {

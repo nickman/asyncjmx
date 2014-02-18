@@ -234,7 +234,7 @@ public class JMXOpResponse implements HistogramKeyProvider<Class<?>> {
 			int pre = output.position();
 			kryo.writeClassAndObject(output, jmxOpResp.response);
 			int objSize = output.position()-pre;
-			log.info("---->OBJ SIZE:[%s]", objSize);			
+			log.debug("---->Response Written. Size:[%s]", objSize);			
 		}
 		
 		
@@ -281,7 +281,7 @@ public class JMXOpResponse implements HistogramKeyProvider<Class<?>> {
 			ChannelBuffer buff = replay.getBuff();
 			//buff.markReaderIndex();
 			try {				
-				log.info("Readable Bytes: [%s], Index: [%s]", buff.readableBytes(), buff.readerIndex());
+				log.debug("Readable Bytes: [%s], Index: [%s]", buff.readableBytes(), buff.readerIndex());
 				switch(replay.getState()) {
 					case OPCODE:					
 						byte opCode = input.readByte();
@@ -293,19 +293,18 @@ public class JMXOpResponse implements HistogramKeyProvider<Class<?>> {
 						replay.checkpoint(JMXResponseDecodeStep.RESPONSE);
 						//$FALL-THROUGH$						
 					case RESPONSE:
-						log.info("Pre-ReadResponse: Avail:[%s], Index:[%s] InputPos:[%s]", buff.readableBytes(), buff.readerIndex(), input.position());
+						log.debug("Pre-ReadResponse: Avail:[%s], Index:[%s] InputPos:[%s]", buff.readableBytes(), buff.readerIndex(), input.position());
 						state.response = kryo.readClassAndObject(input);
 						replay.checkpoint(JMXResponseDecodeStep.BYTESIZE);
+						replay.clean();
 						kryo.getContext().remove("JMXOpResponse");
-						//$FALL-THROUGH$
+						
 						return state;
 					default:
 						throw new Error("Should not reach here");
 				}
-			} catch (Throwable ex) {
-				int ri = buff.readerIndex(), rb = buff.readableBytes();				
+			} catch (Throwable ex) {		
 				replay.reset();
-				log.info("Buff RESET, Pre:[%s][%s], Post:[%s][%s]", ri, rb, buff.readerIndex(), buff.readableBytes());
 				throw REPLAY_ERROR;
 			}
 		}		

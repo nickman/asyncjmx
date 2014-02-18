@@ -19,6 +19,7 @@
 		<netty.version>3.9.0.Final</netty.version>
 		<async.version>1.4.0</async.version>
 		<kryo.version>2.23.0</kryo.version>
+		<guava.version>15.0</guava.version>
 		<!-- Plugin Versions -->
 		<compiler-plugin.version>2.5.1</compiler-plugin.version>
 		<jar-plugin.version>2.4</jar-plugin.version>
@@ -155,6 +156,12 @@
 		  <artifactId>kryo</artifactId>
 		  <version>${kryo.version}</version>
 		</dependency>
+		<dependency>
+		  <groupId>com.google.guava</groupId>
+		  <artifactId>guava</artifactId>
+		  <version>${guava.version}</version>
+		</dependency>
+		
 				
 	</dependencies>
 
