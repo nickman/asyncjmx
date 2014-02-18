@@ -231,7 +231,10 @@ public class JMXOpResponse implements HistogramKeyProvider<Class<?>> {
 		protected void doWrite(Kryo kryo, Output output, JMXOpResponse jmxOpResp) {
 			output.writeByte(jmxOpResp.opCode.opCode);
 			output.writeInt(jmxOpResp.requestId);
+			int pre = output.position();
 			kryo.writeClassAndObject(output, jmxOpResp.response);
+			int objSize = output.position()-pre;
+			log.info("---->OBJ SIZE:[%s]", objSize);			
 		}
 		
 		

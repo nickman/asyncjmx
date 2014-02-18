@@ -81,7 +81,7 @@ public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> 
 	/** The payload size allocated channel buffer */
 	protected ChannelBuffer buff = null;
 	/** The payload size allocated channel buffer input stream */
-	protected ChannelBufferInputStream niffIs = null;
+	protected ChannelBufferInputStream cbInput = null;
 	
 	/** The payload size of the currently processing decode */
 	int payloadSize = -1;
@@ -117,6 +117,9 @@ public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> 
 	 */
 	public void reset() {		
 		buff.readerIndex(getState().offset);
+		input.rewind();
+		input.skip(getState().offset);
+		
 		log.info("Set ManagedBuffer Reader Index to [%s]:[%s]", getState().name(), getState().offset);
 	}
 	
@@ -146,7 +149,7 @@ public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> 
 	protected Object decode(ChannelHandlerContext ctx, Channel channel, ChannelBuffer buffer, JMXResponseDecodeStep state) throws Exception {
 		log.info("Replay Buffer Readable Bytes: [%s]", super.actualReadableBytes());
 		if(state==JMXResponseDecodeStep.BYTESIZE) {
-			payloadSize = buffer.readInt()-4;
+			payloadSize = buffer.readInt();
 			log.info("JMXOpResponse Decode Starting. Remaining Payload Size: [%s] bytes", payloadSize);					
 			buff = bufferFactory.getBuffer(payloadSize);			
 			checkpoint(JMXResponseDecodeStep.OPCODE);
@@ -158,8 +161,10 @@ public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> 
 		int toRead = Math.min(readableBytesAvailable, payloadSize-buff.writerIndex());
 		log.info("Reading [%s] bytes from REPLAY to MANAGED:[%s]", toRead, buff.writerIndex());
 		buff.writeBytes(buffer.readBytes(toRead));
-		niffIs = new ChannelBufferInputStream(buff);
-		input = new UnsafeInput(niffIs);
+		if(cbInput==null) {
+			cbInput = new ChannelBufferInputStream(buff);
+			input = new UnsafeInput(cbInput);
+		}
 		log.info("POST: Buff Bytes Available:[%s], Reader Index:[%s]",buff.readableBytes(), buff.readerIndex());		
 		return ser.read(KryoFactory.getInstance().getKryo(channel), input, JMXOpResponse.class);		
 	}
