@@ -49,10 +49,10 @@ public class TabularDataSupportSerializer extends BaseSerializer<TabularDataSupp
 	@Override
 	protected void doWrite(Kryo kryo, Output output, TabularDataSupport tds) {
 		final String ind = ind();
-		log.info("%s Writing TabularDataSupport [%s]", ind, tds.getTabularType().getDescription());
+		log.debug("%s Writing TabularDataSupport [%s]", ind, tds.getTabularType().getDescription());
 		kryo.writeClassAndObject(output, tds.getTabularType());		
 		int size = tds.size();
-		log.info("%s Writing TabularDataSupport Size:[%s]", ind, size);
+		log.debug("%s Writing TabularDataSupport Size:[%s]", ind, size);
 		output.writeInt(size);
 		output.flush();
 		for(Object key: tds.keySet()) {
@@ -60,7 +60,7 @@ public class TabularDataSupportSerializer extends BaseSerializer<TabularDataSupp
 			Object value = ((CompositeDataSupport)tds.get(keys)).get("value");
 			kryo.writeClassAndObject(output, keys);
 			kryo.writeClassAndObject(output, value);
-			log.info("Key/Value:[%s]--[%s]", Arrays.toString(keys), value);
+			log.debug("Key/Value:[%s]--[%s]", Arrays.toString(keys), value);
 		}
 	}
 
@@ -71,15 +71,15 @@ public class TabularDataSupportSerializer extends BaseSerializer<TabularDataSupp
 //			kryo.setReferences(true);			
 			TabularType ttype = (TabularType)kryo.readClassAndObject(input);
 			int size = input.readInt();
-			log.info("%s Read TabularDataSupport Size:[%s]", ind, size);
+			log.debug("%s Read TabularDataSupport Size:[%s]", ind, size);
 			TabularDataSupport tds = new TabularDataSupport(ttype, size, 0.75f);
 			CompositeType ct = ttype.getRowType();
 			String[] ctKeys = ct.keySet().toArray(new String[0]);
 			for(int i = 0; i < size; i++) {
 				String[] key = (String[])kryo.readClassAndObject(input);
-				log.info("Read Key [%s]", Arrays.toString(key));
+				log.debug("Read Key [%s]", Arrays.toString(key));
 				Object value = kryo.readClassAndObject(input);
-				log.info("Read Value [%s]", value);
+				log.debug("Read Value [%s]", value);
 				try {
 					CompositeDataSupport cds = new CompositeDataSupport(ttype.getRowType(), ctKeys, new Object[] {key[0], value}); 
 					tds.put(cds);

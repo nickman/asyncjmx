@@ -34,12 +34,20 @@ package com.heliosapm.asyncjmx.client;
 
 public enum JMXResponseDecodeStep {
 	/** The total byte size of the entire response wrapper */
-	BYTESIZE,
-	/** The one int originating request id */
-	REQUESTID,
+	BYTESIZE(0),
 	/** The one byte op code that a repsonse is responding to */
-	OPCODE,
+	OPCODE(0),
+	/** The one int originating request id */
+	REQUESTID(1),
 	/** The op response value */
-	RESPONSE;
+	RESPONSE(5);
+	
+	
+	private JMXResponseDecodeStep(int offset) {
+		this.offset = offset;
+	}
+	
+	/** The logical offset in the ChannelBuffer when this checkpoint is called */
+	public final int offset;
 
 }

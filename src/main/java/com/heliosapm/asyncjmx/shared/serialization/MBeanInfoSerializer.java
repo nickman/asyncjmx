@@ -32,7 +32,7 @@ public class MBeanInfoSerializer extends BaseSerializer<MBeanInfo> {
 	
 	@Override
 	protected void doWrite(Kryo kryo, Output output, MBeanInfo mi) {
-		log.info("Writing MBeanInfo for class type [%s] desc [%s]", mi.getClassName(), mi.getDescription());
+		log.debug("Writing MBeanInfo for class type [%s] desc [%s]", mi.getClassName(), mi.getDescription());
 		output.writeString(mi.getClassName());
 		output.writeString(mi.getDescription());
 		
@@ -51,7 +51,7 @@ public class MBeanInfoSerializer extends BaseSerializer<MBeanInfo> {
 		for(MBeanOperationInfo moi: operations) moiSer.write(kryo, output, moi);		
 		for(MBeanNotificationInfo mni: notifications) mniSer.write(kryo, output, mni);
 		
-		log.info("Wrote MBeanInfo for class type [%s] desc [%s]", mi.getClassName(), mi.getDescription());
+		log.debug("Wrote MBeanInfo for class type [%s] desc [%s]", mi.getClassName(), mi.getDescription());
 	}
 
 	@Override
@@ -75,7 +75,7 @@ public class MBeanInfoSerializer extends BaseSerializer<MBeanInfo> {
 		for(int i = 0; i < notifications.length; i++) {
 			notifications[i] = mniSer.read(kryo, input, MBeanNotificationInfo.class);
 		}
-		log.info("Returning MBeanInfo for class type [%s] desc [%s]", className, description);
+		log.debug("Returning MBeanInfo for class type [%s] desc [%s]", className, description);
 		return new MBeanInfo(className, description, attributes, constructors, operations, notifications);
 	}
 

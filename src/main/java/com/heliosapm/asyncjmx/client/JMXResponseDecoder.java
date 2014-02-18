@@ -80,6 +80,9 @@ public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> 
 	protected Input input = null;
 	/** The payload size allocated channel buffer */
 	protected ChannelBuffer buff = null;
+	/** The payload size allocated channel buffer input stream */
+	protected ChannelBufferInputStream niffIs = null;
+	
 	/** The payload size of the currently processing decode */
 	int payloadSize = -1;
 	
@@ -106,6 +109,15 @@ public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> 
 	@Override
 	public void checkpoint(JMXResponseDecodeStep state) {
 		super.checkpoint(state);
+		log.info("------->KInput:[%s]", input.position());		
+	}
+	
+	/**
+	 * Resets the managed buffer to the offset specified by the last checkpoint 
+	 */
+	public void reset() {		
+		buff.readerIndex(getState().offset);
+		log.info("Set ManagedBuffer Reader Index to [%s]:[%s]", getState().name(), getState().offset);
 	}
 	
 	/**
@@ -132,20 +144,23 @@ public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> 
 	 */
 	@Override
 	protected Object decode(ChannelHandlerContext ctx, Channel channel, ChannelBuffer buffer, JMXResponseDecodeStep state) throws Exception {
+		log.info("Replay Buffer Readable Bytes: [%s]", super.actualReadableBytes());
 		if(state==JMXResponseDecodeStep.BYTESIZE) {
-			payloadSize = buffer.readInt();
-			log.info("JMXOpResponse Decode Starting. Payload Size: [%s] bytes", payloadSize);
-			checkpoint(JMXResponseDecodeStep.REQUESTID);			
-			buff = bufferFactory.getBuffer(payloadSize);						
+			payloadSize = buffer.readInt()-4;
+			log.info("JMXOpResponse Decode Starting. Remaining Payload Size: [%s] bytes", payloadSize);					
+			buff = bufferFactory.getBuffer(payloadSize);			
+			checkpoint(JMXResponseDecodeStep.OPCODE);
 		}
 		
-//		int readableBytesAvailable = super.actualReadableBytes();
+		int readableBytesAvailable = super.actualReadableBytes();
 //		log.info("PRE: Payload Size: [%s], Replay Bytes Available: [%s]", payloadSize, readableBytesAvailable);
-//		buff.writeBytes(buffer, Math.min(readableBytesAvailable, payloadSize));
-//		input = new UnsafeInput(new ChannelBufferInputStream(buff));
-//		log.info("POST: Buff Bytes Available: [%s]",buff.readableBytes());
-
-		input = new UnsafeInput(new ChannelBufferInputStream(ChannelBuffers.wrappedBuffer(buffer)));		
+		log.info("PRE: Replay Readable:[%s], ManagedBuff Reader/Writer Index:[%s]/[%s], Optimal Read:[%s]", readableBytesAvailable, buff.readerIndex(), buff.writerIndex(), payloadSize-buff.writerIndex());
+		int toRead = Math.min(readableBytesAvailable, payloadSize-buff.writerIndex());
+		log.info("Reading [%s] bytes from REPLAY to MANAGED:[%s]", toRead, buff.writerIndex());
+		buff.writeBytes(buffer.readBytes(toRead));
+		niffIs = new ChannelBufferInputStream(buff);
+		input = new UnsafeInput(niffIs);
+		log.info("POST: Buff Bytes Available:[%s], Reader Index:[%s]",buff.readableBytes(), buff.readerIndex());		
 		return ser.read(KryoFactory.getInstance().getKryo(channel), input, JMXOpResponse.class);		
 	}
 

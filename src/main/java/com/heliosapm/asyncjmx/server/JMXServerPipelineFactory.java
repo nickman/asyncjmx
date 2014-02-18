@@ -77,7 +77,7 @@ public class JMXServerPipelineFactory implements ChannelPipelineFactory {
 	/** A map of a few differently configured logging handlers that can be activated via JMX */
 	protected final Map<String, LoggingHandler> loggingHandlers;
 	/** The currently installed logging handler config */
-	protected final AtomicReference<String> loggingConfigName = new AtomicReference<String>(LOGGER_HEX_INFO);
+	protected final AtomicReference<String> loggingConfigName = new AtomicReference<String>(LOGGER_INFO);
 	/** Instance logger for handling log requests from the logging handler */
 	protected final Logger log;
 	/** The async execution handler */

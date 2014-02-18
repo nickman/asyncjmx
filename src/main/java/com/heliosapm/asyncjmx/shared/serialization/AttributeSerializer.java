@@ -41,23 +41,23 @@ import com.esotericsoftware.kryo.io.Output;
 public class AttributeSerializer extends BaseSerializer<Attribute> {
 	@Override
 	protected void doWrite(Kryo kryo, Output output, Attribute object) {
-		log.info("Writing Attribute [%s]", object.getName());
+		log.debug("Writing Attribute [%s]", object.getName());
 		output.writeString(object.getName());		
 		Object value = object.getValue();
 		if(value==null) {
 			output.writeByte(0);
 		} else {
-			log.info("Writing Attribute Value for [%s], Type: [%s]", object.getName(), value.getClass().getName());
+			log.debug("Writing Attribute Value for [%s], Type: [%s]", object.getName(), value.getClass().getName());
 			output.writeByte(1);
 			kryo.writeClassAndObject(output, value);
 		}		
-		log.info("Wrote Attribute [%s][%s]", object.getName(), value);
+		log.debug("Wrote Attribute [%s][%s]", object.getName(), value);
 	}
 
 	@Override
 	protected Attribute doRead(Kryo kryo, Input input, Class<Attribute> type) {		
 		String name = input.readString();
-		log.info("Reading Attribute [%s]", name);
+		log.debug("Reading Attribute [%s]", name);
 		Object value = null;
 		if(input.readByte()==1) {
 			value = kryo.readClassAndObject(input);
