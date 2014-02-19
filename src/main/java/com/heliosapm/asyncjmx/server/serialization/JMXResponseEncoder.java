@@ -37,6 +37,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.io.UnsafeOutput;
 import com.heliosapm.asyncjmx.client.JMXOpResponse;
+import com.heliosapm.asyncjmx.shared.JMXCallback;
 import com.heliosapm.asyncjmx.shared.KryoFactory;
 import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 import com.heliosapm.asyncjmx.shared.serialization.PayloadSizeHistogram;
@@ -81,6 +82,31 @@ public class JMXResponseEncoder extends OneToOneEncoder {
 				out.flush();						
 				log.info("Sending Encoded Op Response with [%s] bytes.  Total Payload: [%s].  Op: %s", payloadSize, body.writerIndex(), jmxOpResponse);
 				payloadSizeEstimator.sample(jmxOpResponse, body.writerIndex());
+				return body;
+			} catch (Exception ex) {
+				log.error("JMXResponseEncoder failure", ex);
+				throw ex;
+			} finally {
+				if(kout!=null) try { kout.close(); } catch (Exception x) { /* No Op */ }
+				if(out!=null) try { out.close(); } catch (Exception x) { /* No Op */ }
+			}
+		} else if(msg instanceof JMXCallback) {
+			final JMXCallback jmxCallback = (JMXCallback)msg;
+			Output kout = null;
+			ChannelBufferOutputStream out = null;
+			try {
+				ChannelBuffer body = ChannelBuffers.dynamicBuffer(payloadSizeEstimator.estimateSize(jmxCallback), bufferFactory);
+				body.writeInt(0);
+				out = new ChannelBufferOutputStream(body);			
+				Kryo kryo = KryoFactory.getInstance().getKryo(channel);			
+				kout = new UnsafeOutput(out);
+				kryo.writeObject(kout, jmxCallback);
+				kout.flush();
+				int payloadSize = body.writerIndex() - 4;
+				body.setInt(0, payloadSize);
+				out.flush();						
+				log.info("Sending Encoded JMXCallback with [%s] bytes.  Total Payload: [%s].  Op: %s", payloadSize, body.writerIndex(), jmxCallback);
+				payloadSizeEstimator.sample(jmxCallback, body.writerIndex());
 				return body;
 			} catch (Exception ex) {
 				log.error("JMXResponseEncoder failure", ex);

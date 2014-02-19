@@ -31,15 +31,19 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import javax.management.Attribute;
 import javax.management.AttributeList;
+import javax.management.InstanceNotFoundException;
 import javax.management.MBeanServer;
 import javax.management.MBeanServerConnection;
 import javax.management.MBeanServerFactory;
+import javax.management.Notification;
 import javax.management.NotificationFilter;
 import javax.management.NotificationListener;
 import javax.management.ObjectName;
 import javax.management.QueryExp;
 
 import org.jboss.netty.channel.Channel;
+import org.jboss.netty.channel.ChannelFuture;
+import org.jboss.netty.channel.ChannelFutureListener;
 import org.jboss.netty.channel.ChannelHandler;
 import org.jboss.netty.channel.ChannelHandlerContext;
 import org.jboss.netty.channel.Channels;
@@ -49,6 +53,8 @@ import org.jboss.netty.channel.MessageEvent;
 import org.jboss.netty.channel.SimpleChannelHandler;
 
 import com.heliosapm.asyncjmx.client.JMXOpResponse;
+import com.heliosapm.asyncjmx.client.notifications.ListenerRegistration;
+import com.heliosapm.asyncjmx.shared.JMXCallback;
 import com.heliosapm.asyncjmx.shared.JMXOp;
 import com.heliosapm.asyncjmx.shared.JMXOp.DynamicTypedIterator;
 import com.heliosapm.asyncjmx.shared.JMXResponseType;
@@ -139,7 +145,7 @@ public class JMXMBeanServerInvocationHandler extends SimpleChannelHandler {
 		if(msg instanceof JMXOp) {
 			final Channel channel = e.getChannel();
 			JMXOp op = (JMXOp)msg;
-			Object response = invoke(op);
+			Object response = invoke(op, channel);
 			log.info("[%s] request result: type:[%s], value:[%s]", op.getJmxOpCode(), response.getClass().getName(), response);
 			JMXOpResponse jmxResponse = new JMXOpResponse(op.getJmxOpCode(), op.getOpSeq(), response); 
 			writeRequested(ctx, new DownstreamMessageEvent(channel, Channels.future(channel), jmxResponse, e.getRemoteAddress()));
@@ -169,16 +175,17 @@ public class JMXMBeanServerInvocationHandler extends SimpleChannelHandler {
 	/**
 	 * Executes a received JMXOpInvocation instance
 	 * @param opInvocation The invocation to execute
+	 * @param channel The channel on which the invocation is being invoked
 	 * @return the result of the invocation
 	 */
-	protected <T> Object invoke(JMXOp opInvocation)  {
+	protected <T> Object invoke(JMXOp opInvocation, Channel channel)  {
 		String id = opInvocation.getJmxDomain();
 		final MBeanServerConnection mbeanServer = knownMBeanServers.get(id);
 		if(mbeanServer==null) return new IOException("Failed to locate MBeanServer with id [" + id + "]");
 		DynamicTypedIterator argIter =  opInvocation.getArgumentIterator();
 		try {
 			switch(opInvocation.getJmxOpCode()) {
-			case ADDNOTIFICATIONLISTENER_ONNO:
+			case ADDNOTIFICATIONLISTENER_ONNO:				
 				mbeanServer.addNotificationListener(argIter.next(ObjectName.class), argIter.next(NotificationListener.class), argIter.next(NotificationFilter.class), argIter.next(Object.class));
 				return VoidResult.Instance;
 			case ADDNOTIFICATIONLISTENER_OONO:
@@ -243,6 +250,49 @@ public class JMXMBeanServerInvocationHandler extends SimpleChannelHandler {
 		} catch (Throwable tx) {
 			return tx;
 		}
+	}
+	
+	
+	/**
+	 * Invokes a notification listener registration
+	 * @param opInvocation The wrapped invocation
+	 * @param channel The channel on which the registration is being executed
+	 * @param argIter The operation argument iterator
+	 * @param mbeanServer The target MBeanServer in which to register the listener
+	 * @throws InstanceNotFoundException thrown if the target MBean is not found
+	 * @throws IOException thrown on an IO remoting error
+	 */
+	protected void registerNotificationListener(JMXOp opInvocation, final Channel channel, DynamicTypedIterator argIter, final MBeanServerConnection mbeanServer) throws InstanceNotFoundException, IOException {
+		final ObjectName target = argIter.next(ObjectName.class);
+		NotificationListener listener = argIter.next(NotificationListener.class);
+		NotificationFilter filter = argIter.next(NotificationFilter.class);
+		Object handback = argIter.next(Object.class);
+		if(listener instanceof ListenerRegistration) {
+			ListenerRegistration lr = (ListenerRegistration)listener;
+			final int registrationId = lr.getRegistrationId();
+			final NotificationFilter registrationFilter = lr.getFilter();
+			final NotificationListener actualListener = new NotificationListener() {
+				@Override
+				public void handleNotification(Notification notification, Object handback) {
+					final JMXCallback callback = new JMXCallback(JMXResponseType.JMX_NOTIFICATION, notification, registrationId);
+					channel.write(callback).addListener(new ChannelFutureListener() {
+						@Override
+						public void operationComplete(ChannelFuture future) throws Exception {
+							log.info("JMXCallback [%s] Transmission Complete", callback);
+						}
+					});
+				}
+			};
+			channel.getCloseFuture().addListener(new ChannelFutureListener() {				
+				@Override
+				public void operationComplete(ChannelFuture future) throws Exception {
+					mbeanServer.removeNotificationListener(target, actualListener, registrationFilter, null);
+				}
+			});
+		} else {
+			mbeanServer.addNotificationListener(target, listener, filter, handback);
+		}
+		
 	}
 	
 }

@@ -208,7 +208,7 @@ public class JMXServerPipelineFactory implements ChannelPipelineFactory {
 			pipeline.addLast(LOGGING_HANDLER_NAME, loggingHandler);
 		}
 		pipeline.addLast(CONN_HANDLER_NAME, connHandler);
-		pipeline.addLast(EXEC_HANDLER_NAME, executionHandler);
+		//pipeline.addLast(EXEC_HANDLER_NAME, executionHandler);
 		pipeline.addLast(JMXOPDECODE_HANDLER_NAME, new JMXOpDecoder());
 		pipeline.addLast(JMXRERSPONSE_ENCODER_NAME, this.responseEncoder);
 		pipeline.addLast(JMXINVOCATION_HANDLER_NAME, jmxInvocationHandler);

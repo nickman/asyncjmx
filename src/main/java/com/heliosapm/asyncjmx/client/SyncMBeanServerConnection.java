@@ -27,7 +27,6 @@ package com.heliosapm.asyncjmx.client;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Set;
-import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -61,12 +60,15 @@ import org.jboss.netty.channel.ChannelHandlerContext;
 import org.jboss.netty.channel.ChannelUpstreamHandler;
 import org.jboss.netty.channel.UpstreamMessageEvent;
 
+import com.heliosapm.asyncjmx.client.notifications.ListenerRegistration;
+import com.heliosapm.asyncjmx.shared.JMXCallback;
 import com.heliosapm.asyncjmx.shared.JMXOp;
 import com.heliosapm.asyncjmx.shared.JMXOpCode;
 import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 import com.heliosapm.asyncjmx.shared.serialization.NullResult;
 import com.heliosapm.asyncjmx.shared.serialization.PlaceHolder;
 import com.heliosapm.asyncjmx.shared.serialization.VoidResult;
+import com.heliosapm.asyncjmx.shared.util.IndexedBlockingResultQueue;
 import com.heliosapm.asyncjmx.unsafe.UnsafeAdapter;
 
 /**
@@ -83,7 +85,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 	/** The timeout for JMX invocations in ms */
 	protected final long timeout;
 	/** The synchnonous queue on which the requesting thread waits on a response */
-	protected final SynchronousQueue<Object> timeoutQueue = new SynchronousQueue<Object>();
+	protected final IndexedBlockingResultQueue timeoutQueue;
 	/** The current rid we're waiting on */
 	protected final AtomicInteger currentRid = new AtomicInteger(0);
 	/** Instance logger */
@@ -99,6 +101,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 	public SyncMBeanServerConnection(Channel channel, long timeout) {
 		this.channel = channel;
 		this.timeout = timeout;
+		timeoutQueue = new IndexedBlockingResultQueue(timeout);
 		this.channel.getPipeline().addLast(RESPONSE_HANDLER_NAME, this);
 	}
 	
@@ -119,7 +122,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 	 * @param op The JMX invocation to send to the remote
 	 */
 	@SuppressWarnings("unchecked")
-	protected <T> T writeRequest(Class<T> returnType, final JMXOp op) {
+	protected synchronized <T> T writeRequest(Class<T> returnType, final JMXOp op) {
 		final int concurrency = _concurrency_.incrementAndGet();
 		if(concurrency>1) {
 			//log.warn("\n\t!!!!!!!!!!!!!!!\n\tConcurrency:[%s]\n\t!!!!!!!!!!!!!!!\n", concurrency);
@@ -134,7 +137,8 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 			});
 			Object retValue = null;
 			try {
-				retValue = timeoutQueue.poll(timeout, TimeUnit.MILLISECONDS);
+				JMXOpResponse response = timeoutQueue.registerAndWait(op.getOpSeq());
+				retValue = response.getResponse();
 				if(retValue instanceof PlaceHolder) return null;
 				if(retValue instanceof Throwable) {
 					UnsafeAdapter.throwException((Throwable)retValue);
@@ -161,20 +165,18 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 					log.debug("Received Upstream Message Event [%s]", obj.getClass().getName());
 					if(obj instanceof JMXOpResponse) {
 						JMXOpResponse jmxResponse = (JMXOpResponse)obj;
-						log.info("REQID:[%s] Response: %s", jmxResponse.getRequestId(), jmxResponse);
+						log.info("<-------REQID:[%s] Response: %s", jmxResponse.getRequestId(), jmxResponse);
 						Object response = jmxResponse.getResponse();
-						if(response!=null) {
-							timeoutQueue.add(response);
+						if(response instanceof Throwable) {
+							timeoutQueue.depositResponse(jmxResponse.getRequestId(), (Throwable)response);
 						} else {
-							timeoutQueue.add(NullResult.Instance);
+							timeoutQueue.depositResponse(jmxResponse);
 						}
 					} else if(obj instanceof JMXCallback) {
 						log.info(obj.toString());
 					} else {
-						timeoutQueue.add(new Exception("Unexpected internal type returned [" + obj + "]"));
+						throw new Exception("Unexpected internal type returned [" + obj + "]");
 					}					
-				} else {
-					timeoutQueue.add(NullResult.Instance);
 				}
 			} catch (IllegalStateException ise) {
 				// nobody listening....
@@ -496,9 +498,9 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
      * talking to the MBean server.
      */
     @SuppressWarnings("unchecked")
-	public Set<ObjectInstance> queryMBeans(ObjectName name, QueryExp query)
-	    throws IOException {
-    	return (Set<ObjectInstance>) writeRequest(JMXOpCode.QUERYMBEANS.returnType, JMXOp.newOp(channel, JMXOpCode.QUERYMBEANS, name, query));
+	public Set<ObjectInstance> queryMBeans(ObjectName name, QueryExp query) throws IOException {
+    	Set<ObjectInstance> objectInstances =  (Set<ObjectInstance>) writeRequest(JMXOpCode.QUERYMBEANS.returnType, JMXOp.newOp(channel, JMXOpCode.QUERYMBEANS, name, query));
+    	return objectInstances;
     }
 
     /**
@@ -527,9 +529,10 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
      * talking to the MBean server.
      */
     @SuppressWarnings("unchecked")
-	public Set<ObjectName> queryNames(ObjectName name, QueryExp query)
-	    throws IOException {
-    	return (Set<ObjectName>) writeRequest(JMXOpCode.QUERYNAMES.returnType, JMXOp.newOp(channel, JMXOpCode.QUERYNAMES, name, query));
+	public Set<ObjectName> queryNames(ObjectName name, QueryExp query) throws IOException {
+    	Set<ObjectName> objectNames = (Set<ObjectName>) writeRequest(JMXOpCode.QUERYNAMES.returnType, JMXOp.newOp(channel, JMXOpCode.QUERYNAMES, name, query));
+    	log.info("ObjectNames:%s", objectNames);
+    	return objectNames;
     }
 
 
@@ -803,7 +806,9 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 					NotificationFilter filter,
 					Object handback)
 	    throws InstanceNotFoundException, IOException {
-    	writeRequest(JMXOp.newOp(channel, JMXOpCode.ADDNOTIFICATIONLISTENER_ONNO, name, listener, filter, handback));
+    	final ListenerRegistration lr = ListenerRegistration.getInstance(channel, listener, filter, handback);
+    	log.info("Adding NotifListener on [%s], Listener:[%s]", name, listener);
+    	writeRequest(JMXOp.newOp(channel, JMXOpCode.ADDNOTIFICATIONLISTENER_ONNO, name, lr, null, null));
     }
 
 
@@ -849,6 +854,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 					NotificationFilter filter,
 					Object handback)
 	    throws InstanceNotFoundException, IOException {
+    	log.info("Adding NotifListener on [%s], Listener:[%s]", name, listener);
     	writeRequest(JMXOp.newOp(channel, JMXOpCode.ADDNOTIFICATIONLISTENER_OONO, name, listener, filter, handback));
     }
 

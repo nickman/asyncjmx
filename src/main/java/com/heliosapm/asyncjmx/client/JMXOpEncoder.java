@@ -84,7 +84,7 @@ public class JMXOpEncoder extends OneToOneEncoder {
 				int payloadSize = body.writerIndex() - 4;
 				body.setInt(0, payloadSize);
 				out.flush();						
-				log.info("Sending Encoded Op with [%s] bytes.  Total Payload: [%s].  Op: %s", payloadSize, body.writerIndex(), jmxOp);
+				log.info("------->REQUID [%s] Sending Encoded Op with [%s] bytes.  Total Payload: [%s].  Op: %s", jmxOp.getOpSeq(), payloadSize, body.writerIndex(), jmxOp);
 				payloadSizeEstimator.sample(jmxOp, body.writerIndex());
 				return body;
 			} catch (Exception ex) {

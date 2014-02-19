@@ -30,6 +30,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import com.heliosapm.asyncjmx.client.JMXOpResponse;
+import com.heliosapm.asyncjmx.unsafe.UnsafeAdapter;
 
 /**
  * <p>Title: IndexedBlockingResultQueue</p>
@@ -44,6 +45,9 @@ public class IndexedBlockingResultQueue {
 	protected final Map<Integer, IndexClearingCountDownLatch> latches = new ConcurrentHashMap<Integer, IndexClearingCountDownLatch>();
 	/** A map of JMX responses keyed by the request id */
 	protected final Map<Integer, JMXOpResponse> results = new ConcurrentHashMap<Integer, JMXOpResponse>();
+	/** A map of JMX response exceptions keyed by the request id */
+	protected final Map<Integer, Throwable> errors = new ConcurrentHashMap<Integer, Throwable>();
+	
 	/** The default timeout in ms. */
 	protected final long timeout;
 	
@@ -54,17 +58,69 @@ public class IndexedBlockingResultQueue {
 	public IndexedBlockingResultQueue(long timeout) {
 		this.timeout = timeout;
 	}
+	
+	/**
+	 * Waits for the JMXOpResponse with the passed request id using the default timeout
+	 * @param requestId The request id of the response we're waiting for 
+	 * @return The JMXOpResponse
+	 * @throws InterruptedException Thrown if the waiting thread is interrupted while wating
+	 */
+	public JMXOpResponse registerAndWait(int requestId) throws InterruptedException {
+		return registerAndWait(requestId, timeout);
+	}
+	
+	/**
+	 * Deposits a response and drops the waiting latch
+	 * @param response The response
+	 */
+	public void depositResponse(JMXOpResponse response) {
+		IndexClearingCountDownLatch latch = latches.get(response.getRequestId());
+		if(latch!=null) {
+			results.put(response.getRequestId(), response);
+			latch.countDown();
+		}
+	}
 
-	public JMXOpResponse registerAndWait(int requestId, long timeout) {
+	/**
+	 * Deposits an exception and drops the waiting latch
+	 * @param requestId The request id the error is associated to 
+	 * @param error The exception
+	 */
+	public void depositResponse(int requestId, Throwable error) {
+		IndexClearingCountDownLatch latch = latches.get(requestId);
+		if(latch!=null) {
+			errors.put(requestId, error);
+			latch.countDown();
+		}
+	}
+
+	/**
+	 * Waits for the JMXOpResponse with the passed request id
+	 * @param requestId The request id of the response we're waiting for 
+	 * @param timeout The timeout in ms.
+	 * @return The JMXOpResponse
+	 * @throws InterruptedException Thrown if the waiting thread is interrupted while wating
+	 */
+	public JMXOpResponse registerAndWait(int requestId, long timeout) throws InterruptedException {
 		IndexClearingCountDownLatch latch = new IndexClearingCountDownLatch(requestId);
 		latches.put(requestId, latch);
 		try {
 			if(latch.await(timeout, TimeUnit.MILLISECONDS)) {
-				return results.remove(requestId);
+				JMXOpResponse resp = results.remove(requestId);
+				if(resp!=null) {
+					return resp;					
+				} else {
+					Throwable t = errors.remove(requestId);
+					if(t!=null) {
+						UnsafeAdapter.throwException(t);
+					}
+				}
 			}
 			throw new RuntimeException("Timeout");			
 		} catch (InterruptedException iex) {
-			throw new RuntimeException(iex);
+			latches.remove(requestId);
+			results.remove(requestId);			
+			throw iex;
 		}
 	}
 	
