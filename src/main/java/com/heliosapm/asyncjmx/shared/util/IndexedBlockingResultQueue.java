@@ -109,14 +109,13 @@ public class IndexedBlockingResultQueue {
 				JMXOpResponse resp = results.remove(requestId);
 				if(resp!=null) {
 					return resp;					
-				} else {
-					Throwable t = errors.remove(requestId);
-					if(t!=null) {
-						UnsafeAdapter.throwException(t);
-					}
+				}
+				Throwable t = errors.remove(requestId);
+				if(t!=null) {
+					UnsafeAdapter.throwException(t);
 				}
 			}
-			throw new RuntimeException("Timeout");			
+			throw new RuntimeException("Timeout on Thread [" + Thread.currentThread().getName() + "]");			
 		} catch (InterruptedException iex) {
 			latches.remove(requestId);
 			results.remove(requestId);			
@@ -124,6 +123,13 @@ public class IndexedBlockingResultQueue {
 		}
 	}
 	
+	/**
+	 * <p>Title: IndexClearingCountDownLatch</p>
+	 * <p>Description: An extension of {@link CountDownLatch} that clears entries in the pending map</p> 
+	 * <p>Company: Helios Development Group LLC</p>
+	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
+	 * <p><code>com.heliosapm.asyncjmx.shared.util.IndexedBlockingResultQueue.IndexClearingCountDownLatch</code></p>
+	 */
 	protected class IndexClearingCountDownLatch extends CountDownLatch {
 		/** The id of the index to clear on timeout */
 		private final int id;

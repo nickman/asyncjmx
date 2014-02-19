@@ -34,16 +34,21 @@ package com.heliosapm.asyncjmx.shared;
 
 public enum JMXResponseType {
 	/** A repsonse to a JMX Op */
-	JMX_RESPONSE,
+	JMX_RESPONSE("RESPONSE_HANDLER"),
 	/** An async JMX Notification emitted from the server */
-	JMX_NOTIFICATION,
+	JMX_NOTIFICATION("NOTIFICATION_HANDLER"),
 	/** A cache update or directive */
-	CACHE_OP;
+	CACHE_OP("CACHEOP_HANDLER");
 	
-	
+	private JMXResponseType(String handlerName) {
+		this.handlerName = handlerName;
+	}
 	
 	/** The opcode byte for this response type */
 	public final byte opCode = (byte)this.ordinal();
+	
+	/** THe name of the handler in the channel pipeline that will handle this response type */
+	public final String handlerName;
 	
 	/**
 	 * Decodes the passed byte to a JMXResponseType

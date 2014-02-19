@@ -24,11 +24,12 @@
  */
 package com.heliosapm.asyncjmx.shared.serialization;
 
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
-import javax.management.openmbean.CompositeDataSupport;
-import javax.management.openmbean.CompositeType;
 import javax.management.openmbean.TabularDataSupport;
 import javax.management.openmbean.TabularType;
 
@@ -54,14 +55,19 @@ public class TabularDataSupportSerializer extends BaseSerializer<TabularDataSupp
 		int size = tds.size();
 		log.debug("%s Writing TabularDataSupport Size:[%s]", ind, size);
 		output.writeInt(size);
-		output.flush();
-		for(Object key: tds.keySet()) {
-			String[] keys = ((List<String>)key).toArray(new String[0]);
-			Object value = ((CompositeDataSupport)tds.get(keys)).get("value");
-			kryo.writeClassAndObject(output, keys);
-			kryo.writeClassAndObject(output, value);
-			log.debug("Key/Value:[%s]--[%s]", Arrays.toString(keys), value);
+		for(Map.Entry<Object, Object> entry: tds.entrySet()) {
+			List<String> keys = (List<String>)entry.getKey();
+			kryo.writeClassAndObject(output, new ArrayList<String>(keys));
+			kryo.writeClassAndObject(output, entry.getValue());
 		}
+//		output.flush();
+//		for(Object key: tds.keySet()) {
+//			String[] keys = ((List<String>)key).toArray(new String[0]);
+//			Object value = ((CompositeDataSupport)tds.get(keys)).get("value");
+//			kryo.writeClassAndObject(output, keys);
+//			kryo.writeClassAndObject(output, value);
+//			log.debug("Key/Value:[%s]--[%s]", Arrays.toString(keys), value);
+//		}
 	}
 
 	@Override
@@ -73,20 +79,29 @@ public class TabularDataSupportSerializer extends BaseSerializer<TabularDataSupp
 			int size = input.readInt();
 			log.debug("%s Read TabularDataSupport Size:[%s]", ind, size);
 			TabularDataSupport tds = new TabularDataSupport(ttype, size, 0.75f);
-			CompositeType ct = ttype.getRowType();
-			String[] ctKeys = ct.keySet().toArray(new String[0]);
+			Map<Object, Object> tdsValues = new LinkedHashMap<Object, Object>(size);
 			for(int i = 0; i < size; i++) {
-				String[] key = (String[])kryo.readClassAndObject(input);
-				log.debug("Read Key [%s]", Arrays.toString(key));
+				Object key = kryo.readClassAndObject(input);
 				Object value = kryo.readClassAndObject(input);
-				log.debug("Read Value [%s]", value);
-				try {
-					CompositeDataSupport cds = new CompositeDataSupport(ttype.getRowType(), ctKeys, new Object[] {key[0], value}); 
-					tds.put(cds);
-				} catch (Exception ex) {
-					log.warn("Failed to process CDS for tabular type: %s", ex.toString());
-				}
+				List<String> keys = (List<String>)key;
+				
+				tdsValues.put(Collections.unmodifiableList(keys), value);
 			}
+			tds.putAll(tdsValues);
+//			CompositeType ct = ttype.getRowType();
+//			String[] ctKeys = ct.keySet().toArray(new String[0]);
+//			for(int i = 0; i < size; i++) {
+//				String[] key = (String[])kryo.readClassAndObject(input);
+//				log.debug("Read Key [%s]", Arrays.toString(key));
+//				Object value = kryo.readClassAndObject(input);
+//				log.debug("Read Value [%s]", value);
+//				try {
+//					CompositeDataSupport cds = new CompositeDataSupport(ttype.getRowType(), ctKeys, new Object[] {key[0], value}); 
+//					tds.put(cds);
+//				} catch (Exception ex) {
+//					log.warn("Failed to process CDS for tabular type: %s", ex.toString());
+//				}
+//			}
 			return tds;
 		} finally {
 //			kryo.setReferences(false);

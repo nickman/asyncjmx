@@ -82,8 +82,8 @@ public abstract class BaseSerializer<T> extends Serializer<T> {
 			return t;
 		} catch (Exception ex) {
 			//log.error("Serializer read failed:[%s]", ex);
-			ex.printStackTrace(System.err);
-			throw new RuntimeException("Serializer read [" + getClass().getSimpleName() + "] failed" , ex);
+//			ex.printStackTrace(System.err);
+			throw new RuntimeException("Serializer read [" + getClass().getSimpleName() + "] failed:" , ex);
 		} finally {
 			undent();
 		}

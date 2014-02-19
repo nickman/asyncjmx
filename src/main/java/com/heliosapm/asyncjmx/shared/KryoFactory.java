@@ -143,6 +143,8 @@ import org.objenesis.strategy.StdInstantiatorStrategy;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Output;
+import com.esotericsoftware.kryo.serializers.CollectionSerializer;
+import com.esotericsoftware.kryo.serializers.JavaSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.ArrayTypeSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.AttributeSerializer;
 import com.heliosapm.asyncjmx.shared.serialization.CompositeDataSupportSerializer;
@@ -299,13 +301,7 @@ public class KryoFactory {
 		}
 //		AsyncJMXSerializerFactory.getInstance().addRegistered(kryo);
 		kryo.register(runtimeForName("java.util.Collections$UnmodifiableRandomAccessList"), new UnmodifiableRandomAccessListSerializer());
-		kryo.register(runtimeForName("sun.management.GcInfoCompositeData"), new CompositeDataSupportSerializer());
-		kryo.register(ArrayType.class, new ArrayTypeSerializer());
-		kryo.register(SimpleType.class, new SimpleTypeSerializer());
-		kryo.register(TabularType.class, new TabularTypeSerializer());
-		kryo.register(TabularDataSupport.class, new TabularDataSupportSerializer());
-		kryo.register(CompositeType.class, new CompositeTypeSerializer());
-		kryo.register(CompositeDataSupport.class, new CompositeDataSupportSerializer());
+//		kryo.register(runtimeForName("sun.management.GcInfoCompositeData"), new CompositeDataSupportSerializer());
 //		kryo.register(HashSet.class, new CollectionSerializer());
 		kryo.register(ObjectName.class, new ObjectNameSerializer());
 		kryo.register(ObjectInstance.class, new ObjectInstanceSerializer());
@@ -313,6 +309,25 @@ public class KryoFactory {
 		kryo.register(MBeanServerNotification.class, new MBeanServerNotificationSerializer());
 		kryo.register(MBeanInfo.class, new MBeanInfoSerializer());
 		kryo.register(JMXOp.class, new JMXOp.JMXOpSerializer());
+		
+		/* ===  Having trouble with these
+		kryo.register(ArrayType.class, new ArrayTypeSerializer());
+		kryo.register(SimpleType.class, new SimpleTypeSerializer());
+		kryo.register(TabularType.class, new TabularTypeSerializer());
+		kryo.register(CompositeType.class, new CompositeTypeSerializer());
+		*/
+		kryo.register(TabularDataSupport.class, new TabularDataSupportSerializer());		
+		kryo.register(CompositeDataSupport.class, new CompositeDataSupportSerializer());		
+		
+		JavaSerializer javaSer = new JavaSerializer();
+		
+		kryo.register(ArrayType.class, javaSer);
+		kryo.register(SimpleType.class, javaSer);
+		kryo.register(TabularType.class, javaSer);
+		kryo.register(CompositeType.class, javaSer);
+//		kryo.register(TabularDataSupport.class, javaSer);		
+//		kryo.register(CompositeDataSupport.class, javaSer);
+
 		return kryo;
 	}
 	

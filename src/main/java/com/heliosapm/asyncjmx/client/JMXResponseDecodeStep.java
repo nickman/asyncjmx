@@ -26,13 +26,15 @@ package com.heliosapm.asyncjmx.client;
 
 /**
  * <p>Title: JMXResponseDecodeStep</p>
- * <p>Description: </p> 
+ * <p>Description: Enumeration of the {@link JMXOpResponse} replaying decoder steps.</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>com.heliosapm.asyncjmx.client.JMXResponseDecodeStep</code></p>
  */
 
 public enum JMXResponseDecodeStep {
+	/** The JMX Response Type */
+	RESPTYPE(0),
 	/** The total byte size of the entire response wrapper */
 	BYTESIZE(0),
 	/** The one byte op code that a repsonse is responding to */

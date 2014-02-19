@@ -45,6 +45,7 @@ public class UnmodifiableRandomAccessListSerializer extends BaseSerializer<List<
 
 	@Override
 	protected void doWrite(Kryo kryo, Output output, List<?> object) {
+		
 		if(object.isEmpty()) {
 			output.write(0);
 		} else {
@@ -62,14 +63,15 @@ public class UnmodifiableRandomAccessListSerializer extends BaseSerializer<List<
 		for(int i = 0; i < size; i++) {
 			list.add(kryo.readClassAndObject(input));
 		}
-		try {
-			Constructor<?> ctor = type.getDeclaredConstructor(List.class);
-			ctor.setAccessible(true);
-			return (List<Object>)ctor.newInstance(list);
-		} catch (Exception ex) {
-			ex.printStackTrace(System.err);
-			throw new RuntimeException(ex);
-		}
+		return list;
+//		try {
+//			Constructor<?> ctor = type.getDeclaredConstructor(List.class);
+//			ctor.setAccessible(true);
+//			return (List<Object>)ctor.newInstance(list);
+//		} catch (Exception ex) {
+//			ex.printStackTrace(System.err);
+//			throw new RuntimeException(ex);
+//		}
 	}
 
 }

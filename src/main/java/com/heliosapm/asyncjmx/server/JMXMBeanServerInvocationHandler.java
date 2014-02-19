@@ -186,7 +186,8 @@ public class JMXMBeanServerInvocationHandler extends SimpleChannelHandler {
 		try {
 			switch(opInvocation.getJmxOpCode()) {
 			case ADDNOTIFICATIONLISTENER_ONNO:				
-				mbeanServer.addNotificationListener(argIter.next(ObjectName.class), argIter.next(NotificationListener.class), argIter.next(NotificationFilter.class), argIter.next(Object.class));
+				//mbeanServer.addNotificationListener(argIter.next(ObjectName.class), argIter.next(NotificationListener.class), argIter.next(NotificationFilter.class), argIter.next(Object.class));
+				registerNotificationListener(channel, argIter, mbeanServer);
 				return VoidResult.Instance;
 			case ADDNOTIFICATIONLISTENER_OONO:
 				mbeanServer.addNotificationListener(argIter.next(ObjectName.class), argIter.next(ObjectName.class), argIter.next(NotificationFilter.class), argIter.next(Object.class));
@@ -255,14 +256,13 @@ public class JMXMBeanServerInvocationHandler extends SimpleChannelHandler {
 	
 	/**
 	 * Invokes a notification listener registration
-	 * @param opInvocation The wrapped invocation
 	 * @param channel The channel on which the registration is being executed
 	 * @param argIter The operation argument iterator
 	 * @param mbeanServer The target MBeanServer in which to register the listener
 	 * @throws InstanceNotFoundException thrown if the target MBean is not found
 	 * @throws IOException thrown on an IO remoting error
 	 */
-	protected void registerNotificationListener(JMXOp opInvocation, final Channel channel, DynamicTypedIterator argIter, final MBeanServerConnection mbeanServer) throws InstanceNotFoundException, IOException {
+	protected void registerNotificationListener(final Channel channel, DynamicTypedIterator argIter, final MBeanServerConnection mbeanServer) throws InstanceNotFoundException, IOException {
 		final ObjectName target = argIter.next(ObjectName.class);
 		NotificationListener listener = argIter.next(NotificationListener.class);
 		NotificationFilter filter = argIter.next(NotificationFilter.class);
@@ -289,6 +289,7 @@ public class JMXMBeanServerInvocationHandler extends SimpleChannelHandler {
 					mbeanServer.removeNotificationListener(target, actualListener, registrationFilter, null);
 				}
 			});
+			mbeanServer.addNotificationListener(target, actualListener, registrationFilter, null);
 		} else {
 			mbeanServer.addNotificationListener(target, listener, filter, handback);
 		}

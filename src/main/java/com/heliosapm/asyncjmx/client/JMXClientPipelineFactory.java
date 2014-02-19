@@ -31,6 +31,8 @@ import org.jboss.netty.channel.Channels;
 import org.jboss.netty.handler.logging.LoggingHandler;
 import org.jboss.netty.logging.InternalLogLevel;
 
+import com.heliosapm.asyncjmx.shared.JMXResponseType;
+
 /**
  * <p>Title: JMXClientPipelineFactory</p>
  * <p>Description: The netty channel pipeline factory for the JMX client</p> 
@@ -53,8 +55,7 @@ public class JMXClientPipelineFactory implements ChannelPipelineFactory {
 	public static final String NEWCONN_HANDLER = "connHandler";
 	/** The JMX Op Encoder  */
 	public static final String JMXOP_ENCODER = "opEncoder";
-	/** The JMX Response Decoder  */
-	public static final String JMXOP_DECODER = "opDecoder";
+	
 	
 	
 	/**
@@ -75,7 +76,7 @@ public class JMXClientPipelineFactory implements ChannelPipelineFactory {
 		//pipeline.addLast("log", new LoggingHandler(InternalLogLevel.INFO, true));
 		pipeline.addLast(NEWCONN_HANDLER, connectionHandler);
 		pipeline.addLast(JMXOP_ENCODER, opEncoder);
-		pipeline.addLast(JMXOP_DECODER, new JMXResponseDecoder());
+		pipeline.addLast(JMXResponseType.JMX_RESPONSE.handlerName, new JMXResponseDecoder());
 		return pipeline;
 	}
 

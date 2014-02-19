@@ -26,20 +26,15 @@ package com.heliosapm.asyncjmx.client;
 
 import java.io.InputStream;
 import java.net.InetSocketAddress;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
 
-import javax.management.AttributeList;
-import javax.management.Descriptor;
-import javax.management.ImmutableDescriptor;
-import javax.management.MBeanAttributeInfo;
 import javax.management.MBeanInfo;
 import javax.management.MBeanServerConnection;
-import javax.management.ObjectInstance;
+import javax.management.Notification;
+import javax.management.NotificationListener;
 import javax.management.ObjectName;
 
 import org.jboss.netty.bootstrap.ClientBootstrap;
@@ -58,7 +53,6 @@ import org.jboss.netty.logging.InternalLoggerFactory;
 import org.jboss.netty.logging.JdkLoggerFactory;
 
 import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
-import com.heliosapm.asyncjmx.unsafe.UnsafeAdapter;
 
 /**
  * <p>Title: AsyncJMXClient</p>
@@ -116,7 +110,7 @@ public class AsyncJMXClient implements ChannelUpstreamHandler {
 	public MBeanServerConnection connectMBeanServerConnection(String host, int port, boolean async) {
 		Channel channel = clientBootstrap.connect(new InetSocketAddress(host, port)).awaitUninterruptibly().getChannel();
 		if(!async) {
-			return new SyncMBeanServerConnection(channel, 3000);
+			return new SyncMBeanServerConnection(channel, 300000);
 		}
 		throw new RuntimeException("No async yet");
 		
@@ -141,6 +135,23 @@ public class AsyncJMXClient implements ChannelUpstreamHandler {
 			MBeanInfo minfo = conn.getMBeanInfo(on);
 			log("MBeanInfo for [%s]:\n%s", on, minfo);
 			
+			NotificationListener listener = new NotificationListener() {
+				/**
+				 * {@inheritDoc}
+				 * @see javax.management.NotificationListener#handleNotification(javax.management.Notification, java.lang.Object)
+				 */
+				@Override
+				public void handleNotification(Notification notification, Object handback) {
+					System.out.println("NOTIF: ------>" + notification);					
+				}
+			};
+			
+			for(ObjectName mb: conn.queryNames(new ObjectName("java.lang:type=GarbageCollector,name=*"), null)) {
+				conn.addNotificationListener(mb, listener, null, null);
+			}
+			
+			System.out.println("\n\n\t************\n\tListening...\n\t************");
+			Thread.sleep(120000);
 //			
 ////			System.out.println("DefaultDomain:" + conn.getDefaultDomain());
 //			Set<ObjectInstance> objectInstances = conn.queryMBeans(null, null);

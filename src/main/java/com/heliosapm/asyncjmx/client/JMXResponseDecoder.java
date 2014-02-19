@@ -33,11 +33,16 @@ import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelHandlerContext;
 import org.jboss.netty.handler.codec.replay.ReplayingDecoder;
 
+import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.UnsafeInput;
+import com.heliosapm.asyncjmx.client.JMXOpResponse.JMXOpResponseSerializer;
+import com.heliosapm.asyncjmx.shared.JMXCallback;
+import com.heliosapm.asyncjmx.shared.JMXResponseType;
 import com.heliosapm.asyncjmx.shared.KryoFactory;
 import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 import com.heliosapm.asyncjmx.shared.util.ConfigurationHelper;
+import com.heliosapm.asyncjmx.unsafe.UnsafeAdapter;
 
 /**
  * <p>Title: JMXResponseDecoder</p>
@@ -65,7 +70,7 @@ public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> 
 	
 	
 	/** The name of the response handler in the pipeline */
-	public static final String RESPONSE_HANDLER_NAME = "responseHandler";
+	public static final String RESPONSE_HANDLER_NAME = JMXResponseType.JMX_RESPONSE.handlerName;
 
 	
 	/** The JMXOpResponse kryo replaying deserializer */
@@ -80,11 +85,14 @@ public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> 
 	/** The payload size of the currently processing decode */
 	int payloadSize = -1; 
 	
+	/** The response type being decoded */
+	JMXResponseType responseType = null;
+	
 	/**
 	 * Creates a new JMXResponseDecoder
 	 */
 	public JMXResponseDecoder() {
-		super(JMXResponseDecodeStep.BYTESIZE);
+		super(JMXResponseDecodeStep.RESPTYPE);
 	}
 	
 	/**
@@ -108,18 +116,22 @@ public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> 
 	/**
 	 * Resets the managed buffer to the offset specified by the last checkpoint 
 	 */
-	public void reset() {		
-		buff.readerIndex(getState().offset);
+	public void reset() {	
+		int offset = getState().offset;
+		if(offset>0 && JMXResponseType.JMX_NOTIFICATION.equals(responseType)) {
+			offset--;
+		}
+		buff.readerIndex(offset);
 		input.rewind();
-		input.skip(getState().offset);		
+		input.skip(offset);		
 		try {
 			cbInput.reset();
-			cbInput.skipBytes(getState().offset);
+			cbInput.skipBytes(offset);
 		} catch (Exception ex) {
 			log.error("Failed to reset ChannelBufferInputStream", ex);
 			throw new RuntimeException("Failed to reset ChannelBufferInputStream", ex);
 		}
-		log.debug("Set ManagedBuffer Reader Index to [%s]:[%s]", getState().name(), getState().offset);
+		log.debug("Set ManagedBuffer Reader Index to [%s]:[%s]", getState().name(), offset);
 
 	}
 	
@@ -130,7 +142,8 @@ public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> 
 		cbInput  = null;
 		input = null;
 		payloadSize = -1;  
-		buff = null;				
+		buff = null;	
+		responseType = null;
 	}
 	
 	/**
@@ -157,11 +170,20 @@ public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> 
 	 */
 	@Override
 	protected Object decode(ChannelHandlerContext ctx, Channel channel, ChannelBuffer buffer, JMXResponseDecodeStep state) throws Exception {
-		if(state==JMXResponseDecodeStep.BYTESIZE) {
+		if(state==JMXResponseDecodeStep.RESPTYPE) {
+			byte respTypeCode = buffer.readByte();
+			responseType = JMXResponseType.decode(respTypeCode);
+			checkpoint(JMXResponseDecodeStep.BYTESIZE);
+		}
+		if(state==JMXResponseDecodeStep.BYTESIZE || (state==JMXResponseDecodeStep.RESPTYPE && this.getState()==JMXResponseDecodeStep.BYTESIZE)) {
 			payloadSize = buffer.readInt();
-			checkpoint(JMXResponseDecodeStep.OPCODE);
+			if(responseType == JMXResponseType.JMX_RESPONSE) {
+				checkpoint(JMXResponseDecodeStep.OPCODE);
+			} else if(responseType == JMXResponseType.JMX_NOTIFICATION) {
+				checkpoint(JMXResponseDecodeStep.REQUESTID);
+			}
 			
-			log.debug("JMXOpResponse Decode Starting. Remaining Payload Size: [%s] bytes", payloadSize);					
+			log.info("JMX Response Type [%s] Decode Starting. Remaining Payload Size: [%s] bytes", responseType, payloadSize);					
 			buff = bufferFactory.getBuffer(payloadSize);				
 			//=========================================================================
 			// This will force all bytes to be read before decoding
@@ -173,17 +195,43 @@ public class JMXResponseDecoder extends ReplayingDecoder<JMXResponseDecodeStep> 
 		}
 		
 		int readableBytesAvailable = super.actualReadableBytes();
+		log.info("Read Option: Bytes Required:[%s], BytesAvail:[%s], Bytes To Fill:[%s]   ----> [%s]", payloadSize, readableBytesAvailable, payloadSize-buff.writerIndex(), Math.min(readableBytesAvailable, payloadSize-buff.writerIndex()));
 		int toRead = Math.min(readableBytesAvailable, payloadSize-buff.writerIndex());
-		log.debug("Reading [%s] bytes from REPLAY to MANAGED:[%s]", toRead, buff.writerIndex());
+		log.info("Reading [%s] bytes from REPLAY to MANAGED:[%s]", toRead, buff.writerIndex());
 		buff.writeBytes(buffer.readBytes(toRead));
+		log.info("Bytes Available after read: [%s]", buff.readableBytes());
 		
 		if(cbInput==null) {
 			cbInput = new ChannelBufferInputStream(buff);
 			cbInput.mark(payloadSize);
 			input = new UnsafeInput(cbInput);
 		}
-		log.debug("POST: Buff Bytes Available:[%s], Reader/Writer Index:[%s][%s]",buff.readableBytes(), buff.readerIndex(), buff.writerIndex());		
-		return ser.read(KryoFactory.getInstance().getKryo(channel), input, JMXOpResponse.class);		
+		log.debug("POST: JMX Response Type [%s] Buff Bytes Available:[%s], Reader/Writer Index:[%s][%s]", responseType, buff.readableBytes(), buff.readerIndex(), buff.writerIndex());
+		if(buff.readableBytes()<payloadSize) {
+			UnsafeAdapter.throwException(JMXOpResponseSerializer.REPLAY_ERROR);
+		}		
+		if(responseType == JMXResponseType.JMX_RESPONSE) {
+			JMXOpResponse opResponse = ser.read(KryoFactory.getInstance().getKryo(channel), input, JMXOpResponse.class);
+			log.info("Decoded JMXOpResponse [%s]", opResponse);
+			return opResponse;
+		} else if(responseType == JMXResponseType.JMX_NOTIFICATION) {
+			try {
+				JMXCallback callback = KryoFactory.getInstance().getKryo(channel).readObject(input, JMXCallback.class);
+				log.info("Decoded JMXCallback [%s]", callback);
+				checkpoint(JMXResponseDecodeStep.RESPTYPE);
+				clean();
+				return callback;
+			} catch (Throwable ex) {
+				ex.printStackTrace(System.err);
+				reset();
+				UnsafeAdapter.throwException(JMXOpResponseSerializer.REPLAY_ERROR);
+				throw new RuntimeException("Will not be thrown. Unreachable code");
+			}
+		} else {
+			checkpoint(JMXResponseDecodeStep.RESPTYPE);
+			clean();			
+			throw new UnsupportedOperationException("Response type [" + responseType + "] not supported");
+		}
 	}
 
 }

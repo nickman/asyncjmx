@@ -38,6 +38,7 @@ import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.io.UnsafeOutput;
 import com.heliosapm.asyncjmx.client.JMXOpResponse;
 import com.heliosapm.asyncjmx.shared.JMXCallback;
+import com.heliosapm.asyncjmx.shared.JMXResponseType;
 import com.heliosapm.asyncjmx.shared.KryoFactory;
 import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
 import com.heliosapm.asyncjmx.shared.serialization.PayloadSizeHistogram;
@@ -71,14 +72,15 @@ public class JMXResponseEncoder extends OneToOneEncoder {
 			ChannelBufferOutputStream out = null;
 			try {
 				ChannelBuffer body = ChannelBuffers.dynamicBuffer(payloadSizeEstimator.estimateSize(jmxOpResponse), bufferFactory);
+				body.writeByte(JMXResponseType.JMX_RESPONSE.opCode);
 				body.writeInt(0);
 				out = new ChannelBufferOutputStream(body);			
 				Kryo kryo = KryoFactory.getInstance().getKryo(channel);			
 				kout = new UnsafeOutput(out);
 				kryo.writeObject(kout, jmxOpResponse);
 				kout.flush();
-				int payloadSize = body.writerIndex() - 4;
-				body.setInt(0, payloadSize);
+				int payloadSize = body.writerIndex() - 5;
+				body.setInt(1, payloadSize);
 				out.flush();						
 				log.info("Sending Encoded Op Response with [%s] bytes.  Total Payload: [%s].  Op: %s", payloadSize, body.writerIndex(), jmxOpResponse);
 				payloadSizeEstimator.sample(jmxOpResponse, body.writerIndex());
@@ -96,14 +98,15 @@ public class JMXResponseEncoder extends OneToOneEncoder {
 			ChannelBufferOutputStream out = null;
 			try {
 				ChannelBuffer body = ChannelBuffers.dynamicBuffer(payloadSizeEstimator.estimateSize(jmxCallback), bufferFactory);
+				body.writeByte(JMXResponseType.JMX_NOTIFICATION.opCode);
 				body.writeInt(0);
 				out = new ChannelBufferOutputStream(body);			
 				Kryo kryo = KryoFactory.getInstance().getKryo(channel);			
 				kout = new UnsafeOutput(out);
 				kryo.writeObject(kout, jmxCallback);
 				kout.flush();
-				int payloadSize = body.writerIndex() - 4;
-				body.setInt(0, payloadSize);
+				int payloadSize = body.writerIndex() - 5;
+				body.setInt(1, payloadSize);
 				out.flush();						
 				log.info("Sending Encoded JMXCallback with [%s] bytes.  Total Payload: [%s].  Op: %s", payloadSize, body.writerIndex(), jmxCallback);
 				payloadSizeEstimator.sample(jmxCallback, body.writerIndex());

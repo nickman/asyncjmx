@@ -192,7 +192,7 @@ public class JMXOpResponse implements HistogramKeyProvider<Class<?>> {
 		protected static final JMXLogger log = JMXLogger.getLogger(JMXOpResponseSerializer.class);
 		
 		/** A replay error instance */
-		protected static final Error REPLAY_ERROR;
+		public static final Error REPLAY_ERROR;
 		
 		static {
 			try {
@@ -295,7 +295,7 @@ public class JMXOpResponse implements HistogramKeyProvider<Class<?>> {
 					case RESPONSE:
 						log.debug("Pre-ReadResponse: Avail:[%s], Index:[%s] InputPos:[%s]", buff.readableBytes(), buff.readerIndex(), input.position());
 						state.response = kryo.readClassAndObject(input);
-						replay.checkpoint(JMXResponseDecodeStep.BYTESIZE);
+						replay.checkpoint(JMXResponseDecodeStep.RESPTYPE);
 						replay.clean();
 						kryo.getContext().remove("JMXOpResponse");
 						
@@ -303,54 +303,13 @@ public class JMXOpResponse implements HistogramKeyProvider<Class<?>> {
 					default:
 						throw new Error("Should not reach here");
 				}
-			} catch (Throwable ex) {		
+			} catch (Throwable ex) {	
+				ex.printStackTrace(System.out);
 				replay.reset();
 				throw REPLAY_ERROR;
 			}
 		}		
 	}
-	
-//	protected JMXOpResponse doReadWithReplay(Kryo kryo, Input input, Class<JMXOpResponse> type) {
-//		JMXOpResponse state = (JMXOpResponse)kryo.getContext().get("JMXOpResponse");
-//		if(state==null) {
-//			state = new JMXOpResponse();
-//			kryo.getContext().put("JMXOpResponse", state);
-//		}
-//		int readerIndex = 0;
-//		try {
-//			readerIndex = replay.getBuff().readerIndex(); 
-//			log.info("Readable Bytes: [%s], Index: [%s]", replay.getBuff().readableBytes(), readerIndex);
-//			switch(replay.getState()) {
-//				case REQUESTID:
-//					readerIndex = replay.getBuff().readerIndex(); 						
-//					log.info("Buff reset to [%s], Readable:[%s], Buff:[%s]", readerIndex, replay.getBuff().readableBytes(), replay.getBuff());						
-//					state.response = input.readInt();
-//					replay.checkpoint(JMXResponseDecodeStep.OPCODE);
-//					//$FALL-THROUGH$
-//				case OPCODE:
-//					readerIndex = replay.getBuff().readerIndex(); 						
-//					log.info("Buff reset to [%s], Readable:[%s], Buff:[%s]", readerIndex, replay.getBuff().readableBytes(), replay.getBuff());						
-//					state.opCode = JMXOpCode.decode(input.readByte());
-//					replay.checkpoint(JMXResponseDecodeStep.RESPONSE);
-//					//$FALL-THROUGH$						
-//				case RESPONSE:
-//					readerIndex = replay.getBuff().readerIndex(); 						
-//					log.info("Buff reset to [%s], Readable:[%s], Buff:[%s]", readerIndex, replay.getBuff().readableBytes(), replay.getBuff());						
-//					state.response = kryo.readClassAndObject(input);
-//					replay.checkpoint(JMXResponseDecodeStep.BYTESIZE);
-//					kryo.getContext().remove("JMXOpResponse");
-//					//$FALL-THROUGH$
-//					return state;
-//				default:
-//					throw new Error("Should not reach here");
-//			}
-//		} catch (Throwable ex) {				
-//			replay.getBuff().readerIndex(readerIndex);
-//			log.warn("Kryo decode failed:[%s], Decoding Buffer Reset:[%s](%s)", ex.toString(), replay.getBuff().readableBytes(), replay.getBuff().toString());
-//			throw REPLAY_ERROR;
-//		}
-//	}		
-//}
 	
 
 }

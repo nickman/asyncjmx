@@ -27,7 +27,6 @@ package com.heliosapm.asyncjmx.client;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.management.Attribute;
@@ -44,6 +43,7 @@ import javax.management.MBeanRegistration;
 import javax.management.MBeanRegistrationException;
 import javax.management.MBeanServerConnection;
 import javax.management.NotCompliantMBeanException;
+import javax.management.Notification;
 import javax.management.NotificationFilter;
 import javax.management.NotificationListener;
 import javax.management.ObjectInstance;
@@ -65,7 +65,6 @@ import com.heliosapm.asyncjmx.shared.JMXCallback;
 import com.heliosapm.asyncjmx.shared.JMXOp;
 import com.heliosapm.asyncjmx.shared.JMXOpCode;
 import com.heliosapm.asyncjmx.shared.logging.JMXLogger;
-import com.heliosapm.asyncjmx.shared.serialization.NullResult;
 import com.heliosapm.asyncjmx.shared.serialization.PlaceHolder;
 import com.heliosapm.asyncjmx.shared.serialization.VoidResult;
 import com.heliosapm.asyncjmx.shared.util.IndexedBlockingResultQueue;
@@ -122,7 +121,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 	 * @param op The JMX invocation to send to the remote
 	 */
 	@SuppressWarnings("unchecked")
-	protected synchronized <T> T writeRequest(Class<T> returnType, final JMXOp op) {
+	protected <T> T writeRequest(Class<T> returnType, final JMXOp op) {
 		final int concurrency = _concurrency_.incrementAndGet();
 		if(concurrency>1) {
 			//log.warn("\n\t!!!!!!!!!!!!!!!\n\tConcurrency:[%s]\n\t!!!!!!!!!!!!!!!\n", concurrency);
@@ -132,7 +131,7 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 			channel.write(op).addListener(new ChannelFutureListener() {
 				@Override
 				public void operationComplete(ChannelFuture future) throws Exception {
-					log.debug("Write for op [%s]--[%s]--[%s] complete", op.getJmxOpCode().name(), op.getOpSeq(), Arrays.toString(op.getOpArguments()));
+					log.info("Write for op [%s]--[%s]--[%s] complete", op.getJmxOpCode().name(), op.getOpSeq(), Arrays.toString(op.getOpArguments()));
 				}
 			});
 			Object retValue = null;
@@ -173,7 +172,14 @@ public class SyncMBeanServerConnection implements MBeanServerConnection, Channel
 							timeoutQueue.depositResponse(jmxResponse);
 						}
 					} else if(obj instanceof JMXCallback) {
-						log.info(obj.toString());
+						log.info("JMXCallback:[%s]", obj);
+						JMXCallback callback = (JMXCallback)obj;
+						if(callback.isNotification()) {
+							Notification notif = (Notification)callback.getCallback();
+							int listenerReg = callback.getTarget();
+							ListenerRegistration.handleNotification(e.getChannel(), listenerReg, notif);
+						}
+						
 					} else {
 						throw new Exception("Unexpected internal type returned [" + obj + "]");
 					}					

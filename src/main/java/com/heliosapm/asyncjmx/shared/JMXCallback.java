@@ -62,6 +62,23 @@ public class JMXCallback implements HistogramKeyProvider<Class<?>> {
 	}
 	
 	/**
+	 * Indicates if this callback is a notification
+	 * @return true if this callback is a notification, false otherwise
+	 */
+	public boolean isNotification() {
+		return JMXResponseType.JMX_NOTIFICATION.equals(typeCode);
+	}
+	
+	/**
+	 * Indicates if this callback is a cache op
+	 * @return true if this callback is a cache op, false otherwise
+	 */
+	public boolean isCacheOp() {
+		return JMXResponseType.CACHE_OP.equals(typeCode);
+	}
+	
+	
+	/**
 	 * Returns the target identifier
 	 * @return the target identifier
 	 */
@@ -123,7 +140,7 @@ public class JMXCallback implements HistogramKeyProvider<Class<?>> {
 	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
 	 * <p><code>com.heliosapm.asyncjmx.shared.JMXCallback.JMXCallbackSerializer</code></p>
 	 */
-	public class JMXCallbackSerializer extends BaseSerializer<JMXCallback> {
+	public static class JMXCallbackSerializer extends BaseSerializer<JMXCallback> {
 
 		/**
 		 * {@inheritDoc}
@@ -133,8 +150,7 @@ public class JMXCallback implements HistogramKeyProvider<Class<?>> {
 		protected void doWrite(Kryo kryo, Output output, JMXCallback jc) {
 			output.writeByte(jc.typeCode.opCode);
 			output.writeInt(jc.target);
-			kryo.writeClassAndObject(output, jc.callback);
-			
+			kryo.writeClassAndObject(output, jc.callback);			
 		}
 
 		/**
